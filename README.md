@@ -130,21 +130,21 @@ A Telegram-first, modular web application that brings **wallet + gaming + predic
 
 ## 12) Repo Map
 
-* `tg-miniapp-identity-service` — users/auth/roles/geo
-* `tg-miniapp-payhub-service` — ledger/holds/settlements/conversions
-* `tg-miniapp-playhub-service` — games + **CFB**
-* `tg-miniapp-discovery-service` — watchlists/alerts/news/signals
-* `tg-miniapp-campaigns-service` — quests/airdrops
-* `tg-miniapp-escrow-service` — OTC P2P
-* `tg-miniapp-events-service` — event directory
-* `tg-miniapp-webapp` — Telegram UI
-* `tg-miniapp-admin` — admin UI
-* `tg-miniapp-workers` — async jobs
-* `tg-miniapp-config` — versioned flags/limits
-* `tg-miniapp-infra` — IaC/CI‑CD/observability
-* `tg-miniapp-price-service` — (optional) price/TWAP service
-* `tg-miniapp-game-service-template` — third‑party game boilerplate
-* `tg-miniapp-shared` — shared DTOs/auth/idempotency/tracing
+* [tg-miniapp-identity-service](tg-miniapp-identity-service.md) — users/auth/roles/geo
+* [tg-miniapp-payhub-service](tg-miniapp-payhub-service.md) — ledger/holds/settlements/conversions
+* [tg-miniapp-playhub-service](tg-miniapp-playhub-service.md) — games + **CFB**
+* [tg-miniapp-discovery-service](tg-miniapp-discovery-service.md) — watchlists/alerts/news/signals
+* [tg-miniapp-campaigns-service](tg-miniapp-campaigns-service.md) — quests/airdrops
+* [tg-miniapp-escrow-service](tg-miniapp-escrow-service.md) — OTC P2P
+* [tg-miniapp-events-service](tg-miniapp-events-service.md) — event directory
+* [tg-miniapp-webapp](tg-miniapp-webapp.md) — Telegram UI
+* [tg-miniapp-admin](tg-miniapp-admin.md) — admin UI
+* [tg-miniapp-workers](tg-miniapp-workers.md) — async jobs
+* [tg-miniapp-config](tg-miniapp-config.md) — versioned flags/limits
+* [tg-miniapp-infra](tg-miniapp-infra.md) — IaC/CI‑CD/observability
+* [tg-miniapp-price-service](tg-miniapp-price-service.md) — (optional) price/TWAP service
+* [tg-miniapp-game-service-template](tg-miniapp-game-service-template.md) — third‑party game boilerplate
+* [tg-miniapp-shared](tg-miniapp-shared.md) — shared DTOs/auth/idempotency/tracing
 
 ---
 

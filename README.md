@@ -81,7 +81,7 @@ A Telegram-first, modular web application that brings **wallet + gaming + predic
 * **CFB breadth**: add more assets/timeframes; leaderboards and seasons increase retention.
 * **Events to campaigns**: event attendance → quest claims → token payouts → re‑engagement in games/CFB.
 * **Trust & proof**: public payout stats, provable oracle reports, and fast withdrawals build reputation → lower CAC.
-* **Localization**: geo/area buckets enable city‑level communities and events; content localization (EN/TH first).
+* **Localization**: geo/area buckets enable city‑level communities and events; content localization i18n ('en', 'zh', 'hi', 'es', 'ar', 'ja', 'ko', 'de', 'pt', 'id', 'th').
 
 ---
 

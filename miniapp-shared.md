@@ -1,4 +1,4 @@
-# SystemDesign.md — **tg-miniapp-shared**
+# Miniapp Shared
 *Version:* v0.1.0  
 *Last Updated:* 2025-09-24 04:02 +07  
 *Owner:* FUZE Platform Core — Shared SDKs, DTOs, Middlewares, Contracts

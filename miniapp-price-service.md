@@ -1,7 +1,7 @@
 # Miniapp Price Service
 *Version:* v0.1.0  
 *Last Updated:* 2025-09-24 02:36 +07  
-*Owner:* Platform Data — Market Data and Oracles
+*Owner:* FUZE Platform Data — Market Data and Oracles
 
 > High‑level architectural blueprint for the **Price Service**. This service provides minute bars, snapshots, rate snapshots, and **TWAP** for platform assets used by PlayHub CFB, Funding conversions, Watchlist feeds, and Admin audits. It ingests from approved providers via Workers, computes aggregates, signs **Price Reports**, and exposes **internal only** APIs to other services. No direct end‑user calls.
 
@@ -93,49 +93,9 @@ flowchart LR
 
 ---
 
-## 4) Data Design
+## 4) Data Flows
 
-**PriceTick**  
-- fields: provider key, asset, quote, ts epoch, price int micro units, volume int.  
-
-**PriceBar**  
-- fields: tf code, asset, quote, open int, high int, low int, close int, volume int, start epoch.  
-
-**Snapshot**  
-- fields: asset, quote, price int, source policy id, created at.  
-
-**RateSnapshot**  
-- fields: from currency, to currency, rate int micro precision, method, created at.  
-
-**PriceReport**  
-- fields: report id, kind snapshot or twap, asset, quote, time window, value int, signer id, signature, created at, hash.
-
-**ProviderStatus**  
-- fields: provider key, last tick ts, error code, latency ms, health state.
-
-Indexes: time ordered by asset and quote, compound on tf and start; latest snapshots by pair; provider status by key. All monetary values stored as **integers** in smallest precision such as micro units. No floats persisted.
-
----
-
-## 5) Interfaces (Internal Only)
-Headers for all calls: `Authorization: Bearer service jwt`, `X-Request-Id`. `Idempotency-Key` for POSTs.
-
-- `GET  /internal/v1/prices/snapshot?asset=BTC&quote=USD` → latest snapshot.  
-- `GET  /internal/v1/prices/bars?asset=BTC&quote=USD&tf=1m&from=ISO&to=ISO` → bars.  
-- `GET  /internal/v1/prices/twap?asset=BTC&quote=USD&t=ISO&windowSec=60` → numeric twap and report id.  
-- `GET  /internal/v1/reports/:id` → signed **Price Report** for audits.  
-- `GET  /internal/v1/rates/snapshot?from=STAR&to=USDT` → platform currency rate.  
-- `GET  /healthz` and `/readyz`.
-
-### Ingestion Endpoints (Workers)
-- `POST /internal/v1/ingest/ticks` batched write with provider key and idempotency.  
-- `POST /internal/v1/ingest/bars` optional pre‑aggregated bars if provider gives them.
-
----
-
-## 6) Data Flows
-
-### 6.1 TWAP Query from PlayHub
+### 4.1 TWAP Query from PlayHub
 ```mermaid
 sequenceDiagram
 participant PH as PlayHub
@@ -148,7 +108,7 @@ PR-->>PH: 200 value and report id
 ```
 Rules: integer math only; rounding down; clearly defined window alignment and padding when bars are missing. If quorum below threshold, TWAP returns status degraded and PlayHub may treat it as push in CFB.
 
-### 6.2 Ingestion from Workers
+### 4.2 Ingestion from Workers
 ```mermaid
 sequenceDiagram
 participant WK as Workers
@@ -161,7 +121,7 @@ PR-->>WK: 200 accepted count
 ```
 Workers call approved providers on schedules like each minute and pass normalized ticks.
 
-### 6.3 Rate Snapshot for Funding
+### 4.3 Rate Snapshot for Funding
 ```mermaid
 sequenceDiagram
 participant FD as Funding
@@ -170,10 +130,9 @@ FD->>PR: GET rate snapshot from currency to currency
 PR->>PR: Compute rate chain if needed
 PR-->>FD: 200 rate and snapshot id
 ```
-
 ---
 
-## 7) Calculation Policies
+## 5) Calculation Policies
 
 - **Quorum**: at least N providers or last good from M minutes if partial outage.  
 - **Outlier trim**: drop top and bottom X percent before averaging.  
@@ -183,7 +142,7 @@ PR-->>FD: 200 rate and snapshot id
 
 ---
 
-## 8) Security and Reliability
+## 7) Security and Reliability
 - **Auth**: service JWT allow lists; optional mTLS in cluster.  
 - **Idempotency**: required on ingest POSTs; dedupe by provider key and ts.  
 - **Rate limits**: per caller and provider.  
@@ -194,7 +153,7 @@ PR-->>FD: 200 rate and snapshot id
 
 ---
 
-## 9) Observability
+## 8) Observability
 - **Tracing**: spans for queries and ingestion; include asset and quote tags.  
 - **Metrics**: provider health, tick lag, bar rollup time, twap latency, report sign rate.  
 - **Logs**: structured redacted logs; no provider secrets.  
@@ -202,18 +161,7 @@ PR-->>FD: 200 rate and snapshot id
 
 ---
 
-## 10) Configuration and ENV
-- `ALLOWED_ASSETS` and `ALLOWED_QUOTES` lists.  
-- `TWAP_DEFAULT_WINDOW_SEC` and max window.  
-- `QUORUM_MIN_PROVIDERS` and `OUTLIER_TRIM_PCT`.  
-- `REDIS_URL`, `MONGO_URL`.  
-- `REPORT_SIGNER_SEED` or KMS key reference.  
-- `CALLER_ALLOWLIST` issuers for service JWTs.  
-- Hot reload from **tg miniapp config** every 60 s or less.
-
----
-
-## 11) User Stories and Feature List
+## 10) User Stories and Feature List
 ### Feature List
 - Internal price snapshots and bars.  
 - TWAP computation with signed reports.  
@@ -229,7 +177,7 @@ PR-->>FD: 200 rate and snapshot id
 
 ---
 
-## 12) Roadmap
+## 11) Roadmap
 - Multi signature reports and threshold signing.  
 - On chain posting adapter.  
 - Additional providers and per pair weighting.  
@@ -237,7 +185,7 @@ PR-->>FD: 200 rate and snapshot id
 
 ---
 
-## 13) Compatibility Notes
+## 12) Compatibility Notes
 - Trusted by PlayHub, Funding, Watchlist, and Admin via internal network.  
 - Ingestion runs in Workers; Price Service exposes only validation and storage endpoints.  
 - DTOs and error envelopes via `tg miniapp shared`; config via `tg miniapp config`.

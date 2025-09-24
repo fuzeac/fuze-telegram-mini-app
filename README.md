@@ -122,22 +122,22 @@ Crypto is finally useful when it meets people where they already are. Telegram i
 ---
 
 ## Repo Map (SystemDesign.md lives in each repo)
-- [tg-miniapp-identity-service](miniapp-identity-service.md) — Sessions & service tokens.  
-- `tg-miniapp-webapp` — Telegram frontend.  
-- `tg-miniapp-playhub-service` — Matchmaking, rooms, **CFB v1**.  
-- `tg-miniapp-payhub-service` — Accounts, holds, settlements, ledger.  
-- `tg-miniapp-price-service` — Signed price snapshots, TWAP.  
-- `tg-miniapp-watchlist-service` (formerly discovery) — Assets, feeds, predictions.  
-- `tg-miniapp-funding-service` — Sales, allocations, vesting.  
-- `tg-miniapp-escrow-service` — OTC/P2P contracts.  
-- `tg-miniapp-campaigns-service` — Quests, airdrops, rewards.  
-- `tg-miniapp-events-service` — Event catalog & submissions.  
-- `tg-miniapp-admin` — Operator console & BFF.  
-- `tg-miniapp-workers` — Schedulers & background executors.  
-- `tg-miniapp-config` — Signed configs & publisher.  
-- `tg-miniapp-infra` — Terraform/Helm/GitOps, observability.  
-- `tg-miniapp-game-service-template` — Partner game blueprint.  
-- `tg-miniapp-shared` — DTOs, auth, HTTP client, telemetry, config SDK.
+- [miniapp-identity-service](miniapp-identity-service.md) — Sessions & service tokens.  
+- [miniapp-webapp](miniapp-webapp.md) — Telegram frontend.  
+- [miniapp-playhub-service](miniapp-playhub-service.md) — Matchmaking, rooms, **CFB v1**.  
+- [miniapp-payhub-service](miniapp-payhub-service.md) — Accounts, holds, settlements, ledger.  
+- [miniapp-price-service](miniapp-price-service.md) — Signed price snapshots, TWAP.  
+- [miniapp-watchlist-service](miniapp-watchlist-service.md) (formerly discovery) — Assets, feeds, predictions.  
+- [miniapp-funding-service](miniapp-funding-service.md) — Sales, allocations, vesting.  
+- [miniapp-escrow-service](miniapp-escrow-service.md) — OTC/P2P contracts.  
+- [miniapp-campaigns-service](miniapp-campaigns-service.md) — Quests, airdrops, rewards.  
+- [miniapp-events-service](miniapp-events-service.md) — Event catalog & submissions.  
+- [miniapp-admin](miniapp-admin.md) — Operator console & BFF.  
+- [miniapp-workers](miniapp-workers.md) — Schedulers & background executors.  
+- [miniapp-config](miniapp-config.md) — Signed configs & publisher.  
+- [miniapp-infra](miniapp-infra.md) — Terraform/Helm/GitOps, observability.  
+- [miniapp-game-service-template](miniapp-game-service-template.md) — Partner game blueprint.  
+- [miniapp-shared](miniapp-shared.md) — DTOs, auth, HTTP client, telemetry, config SDK.
 
 > Each repo’s **SystemDesign.md** is intentionally concise and compatible. Together, they form the complete blueprint for a working app.
 

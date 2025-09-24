@@ -122,7 +122,7 @@ Crypto is finally useful when it meets people where they already are. Telegram i
 ---
 
 ## Repo Map (SystemDesign.md lives in each repo)
-- `tg-miniapp-identity-service` — Sessions & service tokens.  
+- [tg-miniapp-identity-service](miniapp-identity-service.md) — Sessions & service tokens.  
 - `tg-miniapp-webapp` — Telegram frontend.  
 - `tg-miniapp-playhub-service` — Matchmaking, rooms, **CFB v1**.  
 - `tg-miniapp-payhub-service` — Accounts, holds, settlements, ledger.  

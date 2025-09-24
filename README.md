@@ -121,7 +121,7 @@ Crypto is finally useful when it meets people where they already are. Telegram i
 
 ---
 
-## Repo Map (SystemDesign.md lives in each repo)
+## Repo Map (Architectural Blueprint lives in each repo)
 - [miniapp-identity-service](miniapp-identity-service.md) — Sessions & service tokens.  
 - [miniapp-webapp](miniapp-webapp.md) — Telegram frontend.  
 - [miniapp-playhub-service](miniapp-playhub-service.md) — Matchmaking, rooms, **CFB v1**.  

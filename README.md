@@ -139,7 +139,7 @@ Crypto is finally useful when it meets people where they already are. Telegram i
 - [miniapp-game-service-template](miniapp-game-service-template.md) — Partner game blueprint.  
 - [miniapp-shared](miniapp-shared.md) — DTOs, auth, HTTP client, telemetry, config SDK.
 
-> Each repo’s **SystemDesign.md** is intentionally concise and compatible. Together, they form the complete blueprint for a working app.
+> Each repo’s **Architectural Blueprint** is intentionally concise and compatible. Together, they form the complete blueprint for a working app.
 
 ---
 

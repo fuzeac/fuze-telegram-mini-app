@@ -1,164 +1,149 @@
-# Fuze Telegram Mini App
+# FUZE Telegram Mini App — Platform Overview
 
-A Telegram-first, modular web application that brings **wallet + gaming + prediction markets + discovery + campaigns + events** into one lightweight experience. Built as a set of focused microservices with off‑chain custody today and clean adapters for on‑chain tomorrow.
+> **Short, human‑friendly blueprint.** These architectural blueprints are the public, “short version” that explains how the **FUZE Telegram Mini App** works at a technical level — without making you read a stack of internal docs. It’s the master map across all repos, with enough depth for builders, partners, and curious users.
 
-> This README frames the *why* and the *what*: story, opportunity, target users, benefits, FUZE utility, monetization, growth, and how we help crypto projects.
-
----
-
-## 1) App Story
-
-* **Problem**: Crypto communities live on Telegram, but most actions (earn, play, discover, support projects) are fragmented across bots, spreadsheets, and third‑party sites. Users drop off; projects can’t activate, retain, or measure.
-* **Solution**: A **single Telegram Mini App** where users can:
-
-  * Manage an **off‑chain wallet** (STAR/FZ/PT/FUZE/USDT) with frictionless deposits/withdrawals.
-  * **Play** head‑to‑head games (via PlayHub) and join **CFB** (Crypto Fair Bet) markets using in‑app currencies.
-  * **Discover** tokens/projects with watchlists, alerts, news, and signals.
-  * Complete **campaigns/airdrops** with verifiable tasks; get paid instantly.
-  * Browse **events** and jump to booking links.
-* **Design principles**: instant boot (Telegram), fully‑collateralized flows, strict idempotency, auditability, and a clear path to on‑chain when/where it helps.
+_Last updated: 2025-09-24 11:02 +07_
 
 ---
 
-## 2) Business Opportunity
-
-* **Where users are**: Telegram hosts thousands of crypto communities; Mini Apps remove install friction and boost trust via the parent bot.
-* **Multi‑surface engagement**: games + prediction + quests + discovery + events = higher session count and time‑on‑platform.
-* **Liquidity & intent**: CFB and Escrow create *priced* intent data (who risks what on which assets), valuable for projects and partners.
-* **Distribution flywheel**: campaigns fund user rewards which cycle back into games/CFB, increasing balances and activity, lowering CAC.
-* **Expandable rails**: off‑chain first makes compliance and iteration fast; future on‑chain adapters unlock new partner ecosystems.
+## The App Story (Why we’re building this)
+Crypto is finally useful when it meets people where they already are. Telegram is that place: dense communities, instant network effects, and global reach. The FUZE Mini App turns Telegram into a **utility layer** — play, discover, join events, earn, and trade within safe boundaries. We obsess over **speed, fairness, and trust**: integer math, signed configs, auditable flows, no hand‑wavy balances.
 
 ---
 
-## 3) Participants (Target Users)
-
-* **Everyday Crypto Users**: want fun, light games, simple prediction markets, quick rewards, and curated info without leaving Telegram.
-* **Active Traders/Power Users**: track assets, set alerts, participate in fair bets, and use OTC escrow for P2P deals.
-* **Project Teams & Creators**: launch campaigns/airdrops, list events, share updates, and observe engagement metrics.
-* **Event Organizers / Communities**: publish meetups or AMAs, drive to booking sites, and optionally gate perks via campaigns.
-* **Partners/Exchanges/Wallets** (Phase‑2): co‑market listings, provide liquidity or sponsor campaigns.
+## Business Opportunity (What this unlocks)
+- **Casual → committed funnel:** lightweight Telegram entry points that graduate users into higher‑trust actions (games, events, contributions, purchases).  
+- **City‑level networks:** localization atoms (areas / buckets) make communities tangible and sponsorable.  
+- **Project enablement:** a turn‑key way for token teams to reach users with fair mechanics, campaigns, and events.  
+- **Partner surface:** external games and tools can plug into PlayHub and ride our identity, wallets, and price rails.
 
 ---
 
-## 4) Benefits to Participants/Users
-
-* **One place, zero friction**: open in Telegram; auth via WebApp HMAC.
-* **Instant actions**: holds/settlements are fast and final; no manual proofs.
-* **Transparent economics**: CFB shows exact rake (7%), fully‑collateralized payouts, and auditable oracle reports.
-* **Earn & engage**: campaigns reward tasks; games/CFB create skill‑and‑conviction based upside.
-* **Signal‑rich discovery**: watchlists, alerts, curated news, and simple momentum/mention signals.
-* **Safety**: Escrow for P2P with dual holds and dispute tools (off‑chain v1).
+## Participants (Target Users)
+- **Players & bettors** — quick matches, fair price bets (CFB v1), verifiable results.  
+- **Explorers** — watchlists, token pages, curated feeds and predictions.  
+- **Organizers** — events and community activations, linked to platforms like Lu.ma, Eventbrite, Meetup, Eventpop.  
+- **Projects & teams** — funding windows, airdrops/campaigns, listings, partner games.  
+- **Operators** — finance/support/compliance via the Admin console.  
 
 ---
 
-## 5) FUZE Utility & Ecosystem Impact
-
-> FUZE is the ecosystem token; the app increases its **velocity, demand, and stickiness** via these mechanisms.
-
-* **Unit of account (internal conversions)**: FUZE → FZ/PT (or future credit units) with configurable fees, creating **conversion demand**.
-* **Fee token & discounts**: pay platform rake/fees in FUZE for discounts or tiered benefits (Phase‑2), driving **explicit FUZE utility**.
-* **Staking for access** (Phase‑2): stake FUZE to unlock higher limits (CFB sizes, campaign budgets) or to list projects/events.
-* **Treasury sinks**: portions of rakes/fees denominated in FZ/PT can be periodically **market-bought into FUZE** to bolster treasury or burn.
-* **Ecosystem rails**: campaigns airdrop FUZE or FUZE‑denominated rewards; discovery surfaces FUZE‑centric promotions.
+## Benefits to Participants
+- **Speed & simplicity:** open in Telegram, act in seconds.  
+- **Fairness by design:** server‑to‑server results, signed price snapshots, audit logs.  
+- **Safety rails:** holds/settlements via Payhub; no silent balance edits.  
+- **Local community:** area buckets to meet IRL; content localized (see next section).
 
 ---
 
-## 6) Platform Monetization (How we earn)
-
-* **CFB Rake**: 7% of the **losing side** (configurable per config repo). Transparent and programmatic.
-* **Game Rakes/Fees**: small per‑match rake or room fee (game‑specific).
-* **Conversion Spreads**: configurable basis points for STAR↔FZ↔PT↔FUZE (via Payhub conversions).
-* **Escrow Fees**: fixed or bps fee on completed P2P trades; optional dispute fee.
-* **Sponsored Campaigns**: projects pay for budgets, featured placements, or cost‑per‑completed‑task.
-* **Data/Insights (opt‑in)**: aggregate, anonymized performance insights for projects (activity funnels, campaign efficacy).
+## FUZE Utility & Ecosystem Impact
+- **Utility tokens for action:** STAR / FZ / PT in MVP for gameplay and CFB v1; future bridges to on‑chain custody.  
+- **Shared rails:** identity, pricing, and ledger primitives enable many apps to coexist.  
+- **Economic flywheels:** fees/rakes reinvested into campaigns, grants, and events to grow local communities.
 
 ---
 
-## 7) Growth Levers & Loops (Opportunity for Growth)
-
-* **K‑factor via campaigns**: referral tasks and squad quests create viral loops with measurable ROI.
-* **Creator/Game ecosystem**: third‑party game servers integrate through a simple template; each new game is a new acquisition surface.
-* **CFB breadth**: add more assets/timeframes; leaderboards and seasons increase retention.
-* **Events to campaigns**: event attendance → quest claims → token payouts → re‑engagement in games/CFB.
-* **Trust & proof**: public payout stats, provable oracle reports, and fast withdrawals build reputation → lower CAC.
-* **Localization**: geo/area buckets enable city‑level communities and events; content localization i18n ('en', 'zh', 'hi', 'es', 'ar', 'ja', 'ko', 'de', 'pt', 'id', 'th').
-
----
-
-## 8) How the App Helps Crypto Projects
-
-* **Turn community into measurable actions**: quests drive follows, joins, AMAs, content shares, and event attendance with anti‑abuse checks.
-* **Fast distribution**: instant, idempotent payouts in FZ/PT/STAR; optional FUZE rewards.
-* **Insightful reporting**: cohort performance, quest completion drop‑offs, and event‑linked conversions.
-* **Flexible promotion surfaces**: featured discovery cards, sponsored CFB slates, campaign pinning.
-* **Low integration cost**: no smart contract required for v1; on‑chain adapters later for trustless flows.
+## Growth Levers & Loops (Opportunities)
+- **Localization (core highlight):**
+  - **Geo/Area buckets** → city‑level rooms, leaderboards, and events.  
+  - **i18n** → `en`, `zh`, `hi`, `es`, `ar`, `ja`, `ko`, `de`, `pt`, `id`, `th`.  
+- **Creator & organizer loops:** reward quality submissions; surface top organizers per area.  
+- **Project loops:** listings drive watchlists → campaigns → events → funding.  
+- **Gameplay loops:** PlayHub tournaments and seasonal ladders; fair bet (CFB v1) hubs by city.  
+- **Referral loops:** clear, anti‑sybil rewards with vesting and limits.
 
 ---
 
-## 9) System Overview (brief)
-
-* **Identity Service** — Telegram auth, users, roles, geo buckets.
-* **Payhub** — ledger, balances, holds/settlements, conversions.
-* **PlayHub** — games + **CFB** (owner vs pool, 7% rake, oracle TWAP).
-* **Discovery** — watchlists, alerts, news, signals.
-* **Campaigns** — quests/airdrops with proof checks and payouts.
-* **Escrow** — P2P OTC with dual holds and disputes.
-* **Events** — directory and external booking links.
-* **Workers** — async jobs, reconcilers, DLQs.
-* **Config & Infra** — versioned flags/limits, IaC, CI/CD, observability.
-
-> See each service’s README for endpoints, ENV, deploy, and tests.
+## How the App Helps Crypto Projects
+- **Launch & grow:** simple presales, allowlists, and vesting via Funding.  
+- **Activate & retain:** events, quests, and watchlist presence; CFB v1 to energize communities around price milestones.  
+- **Operate safely:** Admin approvals, audit trails, and predictable rails for finance tasks.  
+- **Integrate games:** partner backends plug into PlayHub with a small, well‑documented contract.
 
 ---
 
-## 10) KPIs & Guardrails (first pass)
-
-* **Activation**: % of Telegram sessions that mint a session token and visit 2+ surfaces.
-* **Liquidity**: total holds/settlements per day; CFB S\_owner/S\_acc ratios; escrow volume.
-* **Monetization**: rake revenue (CFB/games), spreads (conversions), campaign spend.
-* **Trust**: settlement success rate, orphan-hold age, withdrawal SLA, dispute resolution time.
-* **Safety**: abuse flags per 1k actions; failed proof rates; KYC pass‑through (when enabled).
-
----
-
-## 11) Roadmap Highlights
-
-* **Phase‑1 (MVP)**: off‑chain custody, CFB v1 with STAR/FZ/PT, 1–2 games, discovery basics, campaigns simple tasks, events directory, escrow same‑currency, price service optional.
-* **Phase‑2**: FUZE fee discounts & staking tiers, more games, richer discovery/providers, on‑chain adapters (custody/oracle), advanced escrow templates, creator SDK.
+## Platform Monetization (How we earn)
+- **CFB v1 rake:** default 7% taken from winners (configurable per asset).  
+- **Game fees:** per‑match or seasonal ladders via PlayHub partners.  
+- **Listing & campaign packages:** boosted discovery, sponsored events, curated placements.  
+- **Conversion & payout fees:** when bridges and providers are enabled.  
+- **B2B tooling:** dashboards, data access, and premium moderation for projects.
 
 ---
 
-## 12) Repo Map
+## KPIs & Guardrails (first pass)
+**User KPIs**
+- WAU / MAU, activation rate (first action within 24h), retention cohorts.  
+- Matchmaking time to match, CFB bet participation rate, event RSVPs.  
 
-* [tg-miniapp-identity-service](tg-miniapp-identity-service.md) — users/auth/roles/geo
-* [tg-miniapp-payhub-service](tg-miniapp-payhub-service.md) — ledger/holds/settlements/conversions
-* [tg-miniapp-playhub-service](tg-miniapp-playhub-service.md) — games + **CFB**
-* [tg-miniapp-discovery-service](tg-miniapp-discovery-service.md) — watchlists/alerts/news/signals
-* [tg-miniapp-campaigns-service](tg-miniapp-campaigns-service.md) — quests/airdrops
-* [tg-miniapp-escrow-service](tg-miniapp-escrow-service.md) — OTC P2P
-* [tg-miniapp-events-service](tg-miniapp-events-service.md) — event directory
-* [tg-miniapp-webapp](tg-miniapp-webapp.md) — Telegram UI
-* [tg-miniapp-admin](tg-miniapp-admin.md) — admin UI
-* [tg-miniapp-workers](tg-miniapp-workers.md) — async jobs
-* [tg-miniapp-config](tg-miniapp-config.md) — versioned flags/limits
-* [tg-miniapp-infra](tg-miniapp-infra.md) — IaC/CI‑CD/observability
-* [tg-miniapp-price-service](tg-miniapp-price-service.md) — (optional) price/TWAP service
-* [tg-miniapp-game-service-template](tg-miniapp-game-service-template.md) — third‑party game boilerplate
-* [tg-miniapp-shared](tg-miniapp-shared.md) — shared DTOs/auth/idempotency/tracing
+**Quality KPIs**
+- Push rate in CFB (oracle issues) < 1.5%.  
+- Dispute rate per 1k matches < 2; resolved < 24h.  
+- Fraud flags per 1k actions with decreasing trend.
 
----
+**Financial KPIs**
+- Locked vs available balances (healthy distribution).  
+- Settlement latency p95 < 2s; ledger reconciliation zero‑drift daily.  
 
-## 13) Compliance & Trust (quick note)
-
-This app involves **betting** and **payouts**. Always review local regulations (licensing, KYC/AML, age gating). The architecture supports feature flagging per region, responsible gaming controls (limits, cooldowns, self‑exclusion), audit logs, and data export/deletion.
+**Guardrails**
+- Integer money math; idempotent POSTs; service JWTs only.  
+- Two‑person approvals for withdrawals, manual credits, forced settles.  
+- Signed configs with anti‑rollback; JWKS rotation; least‑privilege IAM.
 
 ---
 
-## 14) Getting Started (dev quickstart)
+## Compliance & Trust
+- **Privacy‑lite:** store user IDs; minimal PII; GDPR‑aligned deletion hooks.  
+- **KYC/AML ready:** pluggable providers for payouts and conversions.  
+- **Fairness guarantees:** price data from Price Service with signed reports; game results via server‑to‑server only.  
+- **Transparency:** per‑action audit logs; reproducible configs in a public format.
 
-1. Boot **Identity** and **Payhub**, then **PlayHub**.
-2. Run **WebApp** with your Telegram bot’s WebApp URL (ngrok for local).
-3. Optional: run **Workers** and **Price Service** for CFB.
-4. Use **Config** repo to enable/disable features and set limits.
+---
 
-Happy building! 🚀
+## Roadmap Highlights
+- **MVP (shipping):** Identity, WebApp, PlayHub (matchmaking + CFB v1 off‑chain), Payhub (ledger/holds/settlements), Watchlist, Funding, Campaigns, Events, Price, Workers, Admin, Config, Infra.  
+- **Near term:** results and feed streaming; richer city hubs; organizer tools; low‑friction top‑ups.  
+- **Next wave:** on‑chain custody adapters; fiat ramps; reputation & badges; more partner games; verified project portals.
+
+---
+
+## Architecture at a Glance
+- **Identity** issues sessions from Telegram initData and service JWTs.  
+- **WebApp** is the Telegram UI; never touches Payhub directly.  
+- **PlayHub** pairs players, creates rooms, verifies game results, and runs **CFB v1**; calls **Payhub** for holds/settlements.  
+- **Payhub** is the source of truth for balances, holds, and ledger entries.  
+- **Price Service** provides signed price snapshots and TWAPs.  
+- **Watchlist** curates assets and feeds. **Funding** handles sales & vesting.  
+- **Campaigns**/ **Events** run growth and IRL activation.  
+- **Workers** schedule settlements, releases, retries, and ingestion.  
+- **Admin** enforces RBAC, approvals, audits.  
+- **Config** ships signed, versioned configs; **Infra** runs everything.
+
+---
+
+## Repo Map (SystemDesign.md lives in each repo)
+- `tg-miniapp-identity-service` — Sessions & service tokens.  
+- `tg-miniapp-webapp` — Telegram frontend.  
+- `tg-miniapp-playhub-service` — Matchmaking, rooms, **CFB v1**.  
+- `tg-miniapp-payhub-service` — Accounts, holds, settlements, ledger.  
+- `tg-miniapp-price-service` — Signed price snapshots, TWAP.  
+- `tg-miniapp-watchlist-service` (formerly discovery) — Assets, feeds, predictions.  
+- `tg-miniapp-funding-service` — Sales, allocations, vesting.  
+- `tg-miniapp-escrow-service` — OTC/P2P contracts.  
+- `tg-miniapp-campaigns-service` — Quests, airdrops, rewards.  
+- `tg-miniapp-events-service` — Event catalog & submissions.  
+- `tg-miniapp-admin` — Operator console & BFF.  
+- `tg-miniapp-workers` — Schedulers & background executors.  
+- `tg-miniapp-config` — Signed configs & publisher.  
+- `tg-miniapp-infra` — Terraform/Helm/GitOps, observability.  
+- `tg-miniapp-game-service-template` — Partner game blueprint.  
+- `tg-miniapp-shared` — DTOs, auth, HTTP client, telemetry, config SDK.
+
+> Each repo’s **SystemDesign.md** is intentionally concise and compatible. Together, they form the complete blueprint for a working app.
+
+---
+
+## Closing
+**The FUZE Mini App** is our bet on useful, everyday crypto where people already are: Telegram. It’s simple to open, fast to use, and designed to grow a healthier FUZE economy — one that rewards participation, not just speculation.
+
+**More updates soon.** If you’d like a private walkthrough or to list your project for the first wave, ping the team.

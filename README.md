@@ -1,6 +1,6 @@
 # FUZE Telegram Mini App — Platform Overview
 
-> **Short.** These architectural blueprints are the public, “short version” that explains how the **FUZE Telegram Mini App** works at a technical level — without making you read a stack of internal docs. It’s the master map across all repos, with enough depth for builders, partners, and curious users.
+> These architectural blueprints are the public, “short version” that explains how the **FUZE Telegram Mini App** works at a technical level — without making you read a stack of internal docs. It’s the master map across all repos, with enough depth for builders, partners, and curious users.
 
 _Last updated: 2025-09-24 11:02 +07_
 

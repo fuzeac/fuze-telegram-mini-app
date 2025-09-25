@@ -8,49 +8,67 @@
 ---
 
 ## 1) Architecture Diagram
+
 ```mermaid
 flowchart LR
   subgraph Clients
-    WEB[Telegram WebApp - Nextjs]:::client
-    ADMIN[Admin Console - Staff]:::client
+    TG["Telegram Mini App"]
+    WEB["Web3 Portal"]
+    ADM["Admin Console"]
   end
 
-  subgraph Watchlist
-    API[/Public REST API\nhealthz and readyz/]:::svc
-    FEED[Aggregation and Feed Builder]:::logic
-    PRED[Sentiment and Prediction Engine]:::logic
-    DB[(MongoDB - Watchlist Token Profile Source News Prediction)]:::db
-    CACHE[(Redis - cache rate limits idem)]:::cache
+  subgraph "Watchlist Service"
+    API["HTTP API"]
+    REG["Catalog (Assets/Projects/Events)"]
+    WLT["Watchlists & Follows"]
+    ALR["Alerts Engine"]
+    FEED["Personalized Feed"]
+    ING["News/Community Ingestion"]
+    EVQ["Schedulers & Workers"]
+    DB["Primary DB"]
+    CCH["Redis Cache"]
   end
 
-  subgraph Core Services
-    IDP[Identity - JWKS and profiles]:::peer
-    PRICE[Price Service - quotes and bars]:::peer
-    EVTS[Events Service - directory links]:::peer
-    WORK[Workers - ingestion and DLQ]:::peer
-    CFG[Config Service - signed config]:::peer
+  subgraph "Platform Services"
+    IDN["Identity Service"]
+    PAY["Payhub Service"]
+    PRC["Price Service"]
+    EVT["Events Service"]
+    CFG["Config Service"]
+    WRK["Workers / Dunning"]
   end
 
-  WEB -->|watchlists feeds details| API
-  ADMIN -->|curate sources and profiles| API
+  subgraph "External Sources"
+    RSS["RSS/Atom Feeds"]
+    API3P["3rd‑party APIs"]
+    Social["Social APIs"]
+  end
 
+  TG -->|manage watchlist, alerts, feed| API
+  WEB -->|same features| API
+  ADM -->|catalog curation, moderation| API
+
+  API --> REG
+  API --> WLT
+  API --> ALR
   API --> FEED
-  API --> PRED
   API --> DB
-  API --> CACHE
+  API --> CCH
+  API --> EVQ
 
-  FEED --> PRICE
-  FEED --> EVTS
-  WORK -->|ingest external sources| FEED
-  CFG --> Watchlist
+  ALR --> PRC
+  FEED --> PRC
+  ING --> RSS
+  ING --> API3P
+  ING --> Social
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
+  API --> IDN
+  API --> CFG
+  API --> EVT
+  API --> PAY
+  EVQ --> WRK
 ```
+
 *Notes:* Watchlist is **read heavy** with strict caching. It does not mutate ledgers or balances. Any pricing comes from **Price Service**; ingestion of external sources is performed by Workers that write to Watchlist, or by Workers that populate the Price Service separately.
 
 ---
@@ -86,30 +104,66 @@ flowchart LR
 
 ## 4) Data Flows
 
-### 4.1 Feed Build
+### 4.1 Add to watchlist then alert create with billing
+
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant WL as Watchlist
-participant RED as Redis
-participant DB as MongoDB
-participant PR as Price Service
-UI->>WL: GET /v1/feeds?asset=BTC
-WL->>RED: cache lookup
-alt miss
-  WL->>DB: query news and profile highlights
-  WL->>PR: price snapshot and bars
-  WL->>WL: blend and rank items
-  WL->>RED: cache response short ttl
-end
-WL-->>UI: 200 feed items
+  autonumber
+  participant UI as Client
+  participant WL as Watchlist
+  participant ID as Identity
+  participant PY as Payhub
+
+  UI->>WL: POST /v1/watchlist/items (Idem-Key)
+  WL->>ID: AuthZ check (user or org role)
+  ID-->>WL: OK
+  WL->>WL: Check free limit, maybe create invoice
+  alt Over limit
+    WL-->>UI: 402 Payment Required (FZ/PT)
+  else In limit
+    WL->>WL: Upsert watch item
+    WL-->>UI: 201 Created
+  end
+
+  UI->>WL: POST /v1/alerts (Idem-Key)
+  WL->>WL: Check free limit, maybe create invoice
+  alt Over limit
+    WL-->>UI: 402 Payment Required (FZ/PT)
+  else In limit
+    WL-->>UI: 201 Created
+  end
 ```
 
-### 4.2 Watchlist Update
-- Client sends `POST /v1/watchlists` with desired items and idempotency key → store or update the default list and return snapshot. Rate limits apply.
+### 4.2 Event reminders
 
-### 4.3 Predictions Close
-- Worker scans `Prediction` where `closeAt <= now` → compares price delta via Price Service → sets `result` and updates `scoreDelta`. No payouts in MVP (informational only).
+```mermaid
+sequenceDiagram
+  participant EV as Events
+  participant WL as Watchlist
+  EV->>WL: POST /internal/v1/events/reminder
+  WL->>WL: Resolve followers and quiet-hours
+  WL-->>EV: 202 Accepted
+```
+
+### 4.3 Official update (badge gated)
+
+```mermaid
+sequenceDiagram
+  participant UI as Client
+  participant WL as Watchlist
+  participant ID as Identity
+
+  UI->>WL: POST /admin/v1/projects/{{id}}/posts
+  WL->>ID: Introspect badge (Project Owner/Organizer)
+  alt Missing or suspended
+    ID-->>WL: Not allowed
+    WL-->>UI: 403 Forbidden
+  else Active
+    ID-->>WL: Allowed
+    WL->>WL: Persist post, fan-out feed
+    WL-->>UI: 201 Created
+  end
+```
 
 ---
 

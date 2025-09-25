@@ -8,57 +8,52 @@
 ---
 
 ## 1) Architecture Diagram
+
 ```mermaid
 flowchart LR
   subgraph Callers
-    PLAY[PlayHub Service]:::peer
-    FUND[Funding Service]:::peer
-    WATCH[Watchlist Service]:::peer
-    ADMIN[Admin Console]:::peer
+    PH["PlayHub Service"]
+    PAY["Payhub Service"]
+    WAT["Watchlist Service"]
+    WEB["Web3 Portal"]
+    ADM["Admin Service"]
   end
 
-  subgraph Price
-    API[/Internal REST API\nhealthz and readyz/]:::svc
-    AGG[Aggregation and TWAP Engine]:::logic
-    SIGN[Report Signer Ed25519]:::logic
-    DB[(MongoDB - Ticks Bars Snapshots Reports ProviderStatus)]:::db
-    CACHE[(Redis - hot cache rate limits idem)]:::cache
+  subgraph "Price Service"
+    API["HTTP API"]
+    AGG["Aggregator & TWAP Engine"]
+    SIG["Snapshot & Quote Signer"]
+    CACHE["Redis Cache"]
+    DB["Timeseries Store"]
+    JOB["Schedulers & Ingestors"]
+    EVT["Event Publisher"]
   end
 
-  subgraph Workers
-    ING[Ingestion Jobs]:::logic
-    NORM[Normalizer and Dedupe]:::logic
+  subgraph "External Providers"
+    CEX["Centralized Feeds"]
+    DEX["On-chain/DEX Feeds"]
+    ORC["Oracle Bridges"]
   end
 
-  subgraph ExternalProviders
-    CG[Provider A - HTTP API]:::ext
-    EX1[Provider B - Exchange API]:::ext
-    EX2[Provider C - Exchange API]:::ext
-  end
+  PH -->|snapshots, twap for CFB| API
+  PAY -->|quotes for convert| API
+  WAT -->|charts, alerts| API
+  WEB -->|public charts| API
+  ADM -->|asset registry, providers| API
 
-  ING --> NORM --> DB
-  NORM --> AGG
-  AGG --> SIGN
   API --> AGG
-  API --> DB
   API --> CACHE
-
-  PLAY --> API
-  FUND --> API
-  WATCH --> API
-  ADMIN --> API
-
-  ING --> CG
-  ING --> EX1
-  ING --> EX2
-
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef ext fill:#FFFDE7,stroke:#FBC02D;
+  API --> DB
+  AGG --> SIG
+  JOB --> AGG
+  JOB --> DB
+  JOB --> CACHE
+  AGG --> EVT
+  JOB --> CEX
+  JOB --> DEX
+  JOB --> ORC
 ```
+
 *Notes:* Ingestion runs in **tg-miniapp-workers** with provider adapters. Price Service focuses on storage, aggregation, and serving signed reports. All consumers authenticate with **service JWTs**.
 
 ---
@@ -96,39 +91,46 @@ flowchart LR
 ## 4) Data Flows
 
 ### 4.1 TWAP Query from PlayHub
+
 ```mermaid
 sequenceDiagram
-participant PH as PlayHub
-participant PR as Price Service
-PH->>PR: GET twap with asset quote time window
-PR->>PR: Fetch minute bars around time
-PR->>PR: Compute window average using integer math
-PR->>PR: Create signed price report
-PR-->>PH: 200 value and report id
+  autonumber
+  participant JOB as Ingestor
+  participant API as Price API
+  participant AGG as Aggregator
+  participant DB as Store
+  participant EVT as Events
+
+  JOB->>AGG: pull ticks from providers
+  AGG->>DB: upsert Snapshot1m for each market
+  AGG->>AGG: recompute OHLCV, TWAP caches
+  AGG->>EVT: publish price.snapshot.1m.created
+  API->>AGG: warm cache on hot markets
 ```
+
 Rules: integer math only; rounding down; clearly defined window alignment and padding when bars are missing. If quorum below threshold, TWAP returns status degraded and PlayHub may treat it as push in CFB.
 
 ### 4.2 Ingestion from Workers
 ```mermaid
 sequenceDiagram
-participant WK as Workers
-participant PR as Price Service
-participant DB as MongoDB
-WK->>PR: POST ingest ticks with provider key
-PR->>PR: Validate provider and dedupe
-PR->>DB: Write ticks then roll up to bars
-PR-->>WK: 200 accepted count
+  participant PH as PlayHub
+  participant API as Price API
+  PH->>API: GET /v1/snapshots/1m?market=BTC-USDT&minute=2025-09-26T10:00:00Z
+  API-->>PH: 200 snapshot with sig
+  PH->>API: GET /v1/snapshots/1m?market=BTC-USDT&minute=2025-09-26T13:00:00Z
+  API-->>PH: 200 snapshot with sig
+  Note over PH,API: PlayHub compares open vs close for CFB
 ```
 Workers call approved providers on schedules like each minute and pass normalized ticks.
 
 ### 4.3 Rate Snapshot for Funding
 ```mermaid
 sequenceDiagram
-participant FD as Funding
-participant PR as Price Service
-FD->>PR: GET rate snapshot from currency to currency
-PR->>PR: Compute rate chain if needed
-PR-->>FD: 200 rate and snapshot id
+  participant PAY as Payhub
+  participant API as Price API
+  PAY->>API: POST /internal/v1/quotes (from,to,amountFrom,tolerance, Idem-Key)
+  API->>API: compute route and rate
+  API-->>PAY: 200 quote with expiresAt and sig
 ```
 ---
 

@@ -10,36 +10,45 @@
 ## 1) Architecture Diagram (HLD)
 ```mermaid
 flowchart LR
-  subgraph Telegram
-    TG[Telegram App + JS SDK]:::ext
+  subgraph "Telegram Container"
+    TG["Telegram App"]
+    WUI["WebApp (Next.js)"]
   end
 
-  subgraph WebApp
-    UI[Next.js React UI]:::client
-    STATE[Client State + Cache]:::client
-    BOOT[Auth Bootstrap from initData]:::client
+  subgraph "Platform APIs"
+    IDN["Identity Service"]
+    PAY["Payhub Service"]
+    PH["PlayHub Service"]
+    FUN["Funding Service"]
+    WAT["Watchlist Service"]
+    PRC["Price Service"]
+    EVT["Events Service"]
+    CMP["Campaigns Service"]
+    ESC["Escrow Service"]
+    CFG["Config Service"]
   end
 
-  subgraph Platform Services
-    IDP[Identity]:::peer
-    PLAY[PlayHub]:::peer
-    WATCH[Watchlist]:::peer
-    CAMP[Campaigns]:::peer
-    EVTS[Events]:::peer
+  subgraph "Infra"
+    CDN["CDN/Edge"]
+    SSR["Next.js Runtime"]
+    ANALYTICS["Telemetry (OTEL)"]
   end
 
-  TG --> BOOT
-  BOOT -->|POST v1 auth telegram| IDP
-  IDP -->|token + profile| STATE
-  UI -->|matchmaking + results| PLAY
-  UI -->|CFB create + accept + result| PLAY
-  UI -->|watchlists + feeds| WATCH
-  UI -->|campaigns list + claim| CAMP
-  UI -->|events browse + details| EVTS
+  TG -->|launch via deep-link| WUI
+  WUI -->|initData auth| IDN
+  WUI -->|localized content| CFG
+  WUI -->|wallet, balances, invoices| PAY
+  WUI -->|matchmaking, CFB| PH
+  WUI -->|fund list, purchase| FUN
+  WUI -->|watchlist, alerts, feed| WAT
+  WUI -->|charts, snapshots| PRC
+  WUI -->|events, reminders| EVT
+  WUI -->|quests, refer, badges view| CMP
+  WUI -->|p2p deals view| ESC
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
-  classDef ext fill:#FFFDE7,stroke:#FBC02D;
+  WUI --> CDN
+  WUI --> SSR
+  WUI --> ANALYTICS
 ```
 *Notes:* WebApp calls **public endpoints** of domain services. Payhub is never called directly by the client. Any balance snapshots shown come from domain responses (e.g., game results or optional summary endpoints).
 
@@ -104,41 +113,71 @@ Persistence: session token in memory + `sessionStorage` fallback (`tg-miniapp-se
 
 ## 6) Data Flows
 
-### 6.1 Login and Bootstrap
+## 6.1 Authentication and badge gating prompt
+
 ```mermaid
 sequenceDiagram
-participant TG as Telegram SDK
-participant UI as WebApp
-participant IDP as Identity
-TG-->>UI: initData in WebView
-UI->>IDP: POST auth telegram with initData
-IDP-->>UI: 200 token and profile
-UI->>UI: hydrate i18n and feature flags
+  autonumber
+  participant TG as "Telegram App"
+  participant UI as WebApp
+  participant ID as Identity
+
+  TG->>UI: Launch with initData
+  UI->>ID: POST /v1/session/telegram { initData }
+  ID-->>UI: 200 { jwt, profile, badges, meters }
+  UI->>UI: Render dashboard, show gated CTAs if badges missing
 ```
 
-### 6.2 Matchmaking and Gameplay Handoff
+## 6.2 Purchase with free tier, then overage payment if needed
+
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant PH as PlayHub
-UI->>PH: POST matchmaking join with game id and stake
-PH-->>UI: 200 waiting or matched with room id and gst and redirect url
-UI->>UI: open game url with gst
-UI->>PH: GET games results by room id
-PH-->>UI: 200 winner and summary
+  autonumber
+  participant UI as WebApp
+  participant FUN as Funding
+  participant PAY as Payhub
+
+  UI->>FUN: POST /v1/sales/{{id}}/purchase (Idem-Key)
+  FUN-->>UI: 202 { purchaseId, status: pending }
+  UI->>PAY: GET /v1/invoices/{{purchaseId}}
+  alt Over free limit
+    PAY-->>UI: 402 Payment Required in FZ or PT
+    UI->>PAY: POST /v1/invoices/{{purchaseId}}/pay { currency }
+    PAY-->>UI: 200 Receipt
+  else Within free tier
+    PAY-->>UI: 204 No Content
+  end
+  UI->>FUN: GET /v1/purchases/{{id}}/status
+  FUN-->>UI: 200 { status }
 ```
 
-### 6.3 CFB v1 Create and Accept
+## 6.3 PlayHub matchmaking and CFB
+
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant PH as PlayHub
-UI->>PH: POST cfb bets create with asset horizon currency stake
-PH-->>UI: 201 bet created open
-UI->>PH: POST cfb bets id accept with amount
-PH-->>UI: 200 accept ok with updated pool
-UI->>PH: GET cfb bets id result
-PH-->>UI: 200 result and payouts
+  autonumber
+  participant UI as WebApp
+  participant PH as PlayHub
+  participant PAY as Payhub
+
+  UI->>PH: POST /v1/matchmaking/join (Idem-Key)
+  PH-->>UI: 202 Waiting
+  UI->>PH: GET /v1/matches/{{id}}
+  PH-->>UI: 200 { roomId, gst }
+  Note over UI,PH: UI redirects to game with GST
+
+  UI->>PH: POST /v1/cfb/bets (Idem-Key)
+  PH-->>UI: 201 Created
+  UI->>PH: POST /v1/cfb/bets/{{id}}/accept (Idem-Key)
+  PH-->>UI: 201 Accepted
+  UI->>PAY: GET /v1/invoices/{{id}}
+  alt Overage due
+    PAY-->>UI: 402 Payment Required
+    UI->>PAY: POST /v1/invoices/{{id}}/pay { currency }
+    PAY-->>UI: 200 Receipt
+  else Covered by free tier
+    PAY-->>UI: 204 No Content
+  end
 ```
 
 ### 6.4 Watchlists, Campaigns, Events

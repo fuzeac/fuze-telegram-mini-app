@@ -11,36 +11,65 @@
 ```mermaid
 flowchart LR
   subgraph Callers
-    PLAY[PlayHub Service]:::peer
-    FUND[Funding Service]:::peer
-    CAMP[Campaigns Service]:::peer
-    ESC[Escrow Service]:::peer
-    ADMIN[Admin BFF]:::peer
+    PH["PlayHub Service"]
+    FUN["Funding Service"]
+    ESC["Escrow Service"]
+    CMP["Campaigns Service"]
+    ADM["Admin Service"]
+    WEB["Telegram Mini App"]
   end
 
-  subgraph Payhub
-    API[/Internal REST API\nhealthz and readyz/]:::svc
-    LEDGER[Ledger and Accounts]:::logic
-    HOLDS[Holds Engine]:::logic
-    SETTLE[Settlement Engine]:::logic
-    CONVERT[Conversion Quotes and Book]:::logic
-    DB[(MongoDB - Account LedgerEntry Hold Settlement Deposit Withdrawal Conversion)]:::db
-    CACHE[(Redis - idempotency rate limits locks)]:::cache
+  subgraph "Payhub Service"
+    API["HTTP API"]
+    LED["Double-Entry Ledger"]
+    HLD["Hold Manager"]
+    SET["Settlement Engine"]
+    FX["Conversion Engine (Quotes/Confirm)"]
+    INV["Invoices & Overage Billing"]
+    ACC["Accounts & Balances"]
+    WH["Webhooks Dispatcher"]
+    MTR["Metering"]
+    JOB["Schedulers/Workers"]
+    CCH["Redis Cache"]
+    DB["MongoDB"]
+    SIG["Signing (Ed25519/HMAC)"]
   end
 
-  CALLERS -. service JWT .-> API
-  API --> LEDGER
-  API --> HOLDS
-  API --> SETTLE
-  API --> CONVERT
+  subgraph "Platform Services"
+    IDN["Identity Service"]
+    PRC["Price Service"]
+    CFG["Config Service"]
+    WRK["Global Workers/Dunning"]
+  end
+
+  subgraph "External"
+    KMS["KMS/HSM"]
+    CHA["Chain Gateways"]
+  end
+
+  PH -->|holds, settlements, rake| API
+  FUN -->|holds, settlements, treasury payout| API
+  ESC -->|holds, split payouts| API
+  CMP -->|rewards/airdrop credits| API
+  ADM -->|adjustments, webhooks, limits| API
+  WEB -->|balances, conversions, invoices| API
+
+  API --> ACC
+  API --> LED
+  API --> HLD
+  API --> SET
+  API --> FX
+  API --> INV
+  API --> MTR
+  API --> WH
   API --> DB
-  API --> CACHE
+  API --> CCH
 
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
+  FX --> PRC
+  INV --> WRK
+  API --> IDN
+  SIG --> KMS
+  JOB --> CHA
 ```
 *Notes:* Payhub performs **atomic** balance updates using Mongo transactions. All POSTs require `Idempotency-Key`. Domain services pass a **correlation id** (room id, bet id, escrow id) for traceability.
 
@@ -78,48 +107,78 @@ flowchart LR
 
 ## 4) Data Flows
 
-### 4.1 Create Hold and Settle Win
+### 4.1 Hold then settle with 7% rake
+
 ```mermaid
 sequenceDiagram
-participant SVC as Domain Service
-participant PAY as Payhub
-SVC->>PAY: POST holds with user id, currency, amount
-PAY-->>SVC: 200 hold id
-Note over SVC: Later after outcome is known
-SVC->>PAY: POST settlements with outcome win and to user id
-PAY-->>SVC: 200 settlement id
+  autonumber
+  participant PH as PlayHub
+  participant PAY as Payhub
+  PH->>PAY: POST /internal/v1/holds (Idem-Key)
+  PAY->>PAY: Reserve funds, post journal
+  PAY-->>PH: 200 { holdId }
+  Note over PH,PAY: Later when outcome known
+  PH->>PAY: POST /internal/v1/settlements { holdId, outcome, rakePct }
+  PAY->>PAY: Compute payouts and fee
+  PAY-->>PH: 200 { settlementId, receipt }
 ```
 
-### 4.2 Settle Loss or Release
+### 4.2 Conversion quote then confirm with overage charge
+
 ```mermaid
 sequenceDiagram
-participant SVC as Domain Service
-participant PAY as Payhub
-SVC->>PAY: POST settlements with outcome loss
-PAY-->>SVC: 200 settlement id
-SVC->>PAY: POST settlements with outcome release
-PAY-->>SVC: 200 settlement id
+  autonumber
+  participant UI as Client
+  participant PAY as Payhub
+  participant PRC as Price
+
+  UI->>PAY: POST /v1/conversions/quote (Idem-Key)
+  PAY->>PRC: TWAP or spot rate
+  PRC-->>PAY: rate, expiresAt
+  PAY-->>UI: 200 { quoteId, rate, expiresAt, sig }
+  UI->>PAY: POST /v1/conversions/{quoteId}/confirm
+  PAY->>PAY: Check free tier, maybe create invoice
+  alt Overage due
+    PAY-->>UI: 402 Payment Required
+  else Within free tier
+    PAY->>PAY: Post journals, update balances
+    PAY-->>UI: 200 Receipt
+  end
 ```
 
-### 4.3 Deposit Credit
+### 4.3 Invoice payment flow
+
 ```mermaid
 sequenceDiagram
-participant ADM as Admin BFF
-participant PAY as Payhub
-ADM->>PAY: POST deposits credit to user
-PAY-->>ADM: 200 deposit id
+  participant UI as Client
+  participant PAY as Payhub
+
+  UI->>PAY: GET /v1/invoices/{id}
+  alt Unpaid
+    PAY-->>UI: 200 { status: open, amount, currency }
+    UI->>PAY: POST /v1/invoices/{id}/pay { currency }
+    PAY-->>UI: 200 { status: paid, receipt }
+  else Paid
+    PAY-->>UI: 200 { status: paid }
+  end
 ```
 
-### 4.4 Withdrawal Review
+### 4.4 Webhook delivery with retry
+
 ```mermaid
 sequenceDiagram
-participant SVC as Domain Service
-participant ADM as Admin BFF
-participant PAY as Payhub
-SVC->>PAY: POST withdrawals request on behalf of user
-ADM->>PAY: POST withdrawals approve with two person rule
-PAY-->>ADM: 200 withdrawal id and status paid
+  participant PAY as Payhub
+  participant SVC as Service
+
+  PAY->>SVC: POST /webhook { eventType, payload, ts, sig }
+  alt 2xx
+    SVC-->>PAY: 204
+  else Error
+    SVC-->>PAY: 500
+    PAY->>PAY: Schedule retry with backoff
+  end
 ```
+
 
 ---
 

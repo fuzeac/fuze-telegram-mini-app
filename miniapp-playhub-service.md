@@ -10,53 +10,56 @@
 ## 1) Architecture Diagram
 ```mermaid
 flowchart LR
-  subgraph Clients
-    WEB[Telegram WebApp]:::client
-    ADMIN[Admin Console]:::client
+  subgraph Client
+    UI["Telegram Mini App"]
+    WEB["Web3 Portal"]
   end
 
-  subgraph PlayHub
-    API[/Public REST API\nhealthz and readyz/]:::svc
-    MM[Matchmaking and Rooms]:::logic
-    CFB[CFB Engine and Payouts]:::logic
-    AUTH[GST and Token Utils]:::logic
-    DB[(MongoDB - Match Bet Ticket Room Audit)]:::db
-    REDIS[(Redis - pools queues rate limits idem)]:::cache
+  subgraph "PlayHub Service"
+    API["HTTP API"]
+    MM["Matchmaking Engine"]
+    GST["Game Session Tokens"]
+    CFB["Crypto Fair Bet (v1 off-chain custody)"]
+    ORA["Price Oracle Adapter"]
+    EVQ["Events and Jobs"]
+    DB["Primary DB"]
+    CCH["Redis"]
   end
 
-  subgraph Core Services
-    IDP[Identity Service]:::peer
-    PAY[Payhub Service]:::peer
-    PRICE[Price Service]:::peer
-    WORK[Workers]:::peer
+  subgraph "Platform Services"
+    IDN["Identity Service"]
+    PAY["Payhub Service"]
+    PRC["Price Service"]
+    CFG["Config Service"]
+    ADM["Admin Service"]
+    WRK["Workers Schedulers"]
   end
 
-  subgraph GameA
-    GAPI[Game A Service - internal]:::peer
+  subgraph "External Game"
+    GMA["Game Service A (template)"]
   end
 
-  WEB -->|join match browse cfb| API
-  ADMIN -->|review rooms cfb| API
+  UI -->|join match, view results| API
+  WEB -->|create CFB, accept, track| API
 
   API --> MM
+  API --> GST
   API --> CFB
-  API --> AUTH
   API --> DB
-  API --> REDIS
-  MM --> GAPI
-  MM --> PAY
-  CFB --> PAY
-  CFB --> PRICE
-  WORK -->|settlement jobs| API
-  IDP --> API
+  API --> CCH
+  API --> EVQ
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
+  MM -->|create room| GMA
+  GMA -->|post result| API
+
+  API -->|verify badges| IDN
+  API -->|holds and settlements| PAY
+  CFB --> ORA
+  ORA --> PRC
+  API --> CFG
+  EVQ --> WRK
 ```
+
 *Notes:* Game services are **independent** deployments that trust PlayHub via allow lists. Game UIs authenticate to game backends using a **GST** (Game Session Token) minted by PlayHub.
 
 ---
@@ -94,75 +97,91 @@ flowchart LR
 ### 4.1 Matchmaking and Game Result
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant PH as PlayHub
-participant GA as Game A
-participant PAY as Payhub
-UI->>PH: POST matchmaking join with game id and stake
-PH->>PAY: Create hold for player stake
-PAY-->>PH: 200 hold id
-Note over PH: Second player joins with same stake
-PH->>PH: Pair players and create match
-PH->>GA: POST internal rooms with room id and players
-GA-->>PH: 200 room created
-PH->>PH: Mint GST for each player
-PH-->>UI: 200 room id and gst and game url
-Note over GA: Gameplay happens and finishes
-GA->>PH: POST internal results with winner id
-PH->>PAY: Settle winner hold as win and loser hold as loss
-PAY-->>PH: 200 settlement ids
-PH-->>UI: GET results returns winner and summary
+  autonumber
+  participant UI as Client
+  participant PH as PlayHub
+  participant ID as Identity
+  participant PY as Payhub
+  participant GM as "Game Service"
+
+  UI->>PH: POST /v1/matchmaking/join (gameId, currency, amount, Idem-Key)
+  PH->>ID: Introspect (gates based on stake thresholds)
+  ID-->>PH: Allowed
+  PH->>PY: POST /internal/v1/holds (amount, currency, purpose=playhub, metadata)
+  PY-->>PH: 201 holdId
+  PH->>PH: Enqueue into pool
+  Note over PH: Another player arrives and matches
+  PH->>GM: POST /internal/v1/rooms {{ roomId, players[] }}
+  GM-->>PH: 200 Created
+  PH->>PH: Mint GST for each player
+  PH-->>UI: 200 {{ roomId, gst }}
 ```
 
 ### 4.2 CFB v1 Create and Accept
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant PH as PlayHub
-participant PAY as Payhub
-UI->>PH: POST cfb bets create with asset horizon currency and owner stake
-PH->>PAY: Create hold for owner stake
-PAY-->>PH: 200 hold id
-PH-->>UI: 201 bet created and status open
-UI->>PH: POST cfb accept with amount
-PH->>PAY: Create hold for acceptor amount
-PAY-->>PH: 200 hold id
-PH-->>UI: 200 accept ok and pool updated
+  participant GM as "Game Service"
+  participant PH as PlayHub
+  participant PY as Payhub
+  GM->>PH: POST /internal/v1/results {{ roomId, winnerId }}
+  PH->>PH: Verify signature and room state
+  PH->>PY: POST /internal/v1/settlements (p1 hold, outcome=win or loss, feeBps=700)
+  PH->>PY: POST /internal/v1/settlements (p2 hold, outcome=win or loss, feeBps=700)
+  PY-->>PH: 200 Settled
+  PH->>PH: Mark match completed
 ```
 
 ### 4.3 CFB v1 Settle
 ```mermaid
 sequenceDiagram
-participant WK as Workers
-participant PH as PlayHub
-participant PR as Price
-participant PAY as Payhub
-WK->>PH: POST internal cfb settle with bet id
-PH->>PR: GET snapshot at open time for price open
-PR-->>PH: 200 price open and report id
-PH->>PR: GET twap around close time for price close
-PR-->>PH: 200 price close and report id
-PH->>PH: Decide winner side using integer compare
-alt owner wins
-  PH->>PAY: Settle owner hold as win to owner with rake bps
-  PH->>PAY: Settle each acceptor hold as loss
-else accept side wins
-  PH->>PAY: Settle owner hold as loss
-  PH->>PAY: Settle acceptor holds as win to each acceptor by ratio
-else push
-  PH->>PAY: Release all holds
-end
-PH-->>WK: 200 settled
+  autonumber
+  participant U as User
+  participant PH as PlayHub
+  participant PY as Payhub
+  participant PR as Price
+
+  U->>PH: POST /v1/cfb/bets (symbol, timeframe, targetAt, acceptCloseAt, currency, amount, direction, Idem-Key)
+  PH->>PH: Validate cutoff <= 0.5 * timeframe
+  PH->>PY: Hold ownerAmount
+  PY-->>PH: 201 holdId
+  PH-->>U: 201 Created (open)
+
+  U->>PH: POST /v1/cfb/bets/{{id}}/accept (amount, Idem-Key)
+  PH->>PH: Ensure now < acceptCloseAt and state=open
+  PH->>PY: Hold accept amount
+  PY-->>PH: 201 holdId
+  PH-->>U: 201 Accepted
+
+  Note over PH: At targetAt, job triggers resolution
+  PH->>PR: Get minute price at open and close
+  PR-->>PH: Prices
+  PH->>PH: Compute winner and payout shares
+  PH->>PY: Settle holds accordingly with feeBps=700
+  PY-->>PH: 200 Settled
+  PH->>PH: Mark bet resolved and create payouts
 ```
 
 **CFB payout policy (MVP)**  
-- Currencies: **STAR, FZ, PT** only.  
-- Owner sets **ownerStake** and horizon. Anyone may **accept** with same currency and any amount until **closeAcceptAt** which is not later than half of horizon.  
-- Determine **priceOpen** at bet creation time by snapshot or shortly after.  
-- Determine **priceClose** at target time using **TWAP** over one minute window.  
-- Winner side receives the **pot minus rake**: `rakeBps = 700` default.  
-- If accept side wins, each acceptor payout equals `acceptorAmount divided by totalAcceptPool times winnerPot`.  
-- If data degraded or price window invalid, bet becomes **push** and holds are released.
+**Matchmaking**
+- Entry requires sufficient balance and may require Gamer badge above stake thresholds.
+- Holds are created before entering pool. Cancellation releases hold.
+- GST TTL default 10 minutes; single use.
+
+**CFB v1**
+- Owner sets timeframe in [1h, 2h, 3h, 1d], targetAt, acceptCloseAt <= half the timeframe.
+- Stake currencies: FZ, PT, STAR only.
+- Pot P = ownerAmount + sum(acceptAmount).
+- Winner side receives P - fee, where fee = P * 0.07 (configurable via Config).
+- Owner wins if (direction=up and closePrice > openPrice) or (direction=down and closePrice < openPrice). Equality is push (refund).
+- If accept side wins, each acceptor gets payout_i = (accept_i / sum_accept) * (P - fee).
+- Price source: minute bars from Price Service. Use nearest minute at bet start and targetAt. If missing, use last known minute prior.
+- Over free tier: creating or accepting beyond monthly limits triggers invoice in FZ/PT via Payhub.
+
+**Idempotency**
+- All create/accept actions require Idempotency-Key. Duplicate keys replay original result.
+
+**Time and Locale**
+- All user-visible times in GMT+7, stored as UTC.
 
 ---
 

@@ -180,8 +180,6 @@ sequenceDiagram
   end
 ```
 
-### 6.4 Watchlists, Campaigns, Events
-- Simple list to detail flows; client uses React Query caching and background refetch.
 
 ---
 

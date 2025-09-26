@@ -11,47 +11,60 @@
 
 ```mermaid
 flowchart LR
-  subgraph Callers
-    PH["PlayHub Service"]
-    PAY["Payhub Service"]
-    WAT["Watchlist Service"]
-    WEB["Web3 Portal"]
-    ADM["Admin Service"]
+  subgraph "Clients"
+    SVC["Internal Services 'Payhub, PlayHub, Funding, Watchlist, Web3 Portal'"]
+    ADM["Admin Console"]
   end
 
   subgraph "Price Service"
-    API["HTTP API"]
-    AGG["Aggregator & TWAP Engine"]
-    SIG["Snapshot & Quote Signer"]
-    CACHE["Redis Cache"]
-    DB["Timeseries Store"]
-    JOB["Schedulers & Ingestors"]
-    EVT["Event Publisher"]
+    API["REST API v1"]
+    REG["Asset & Market Registry"]
+    CFG["Rules & Weights"]
+    COL["Collectors"]
+    NORM["Normalizer"]
+    AGG["Aggregator"]
+    SNAP["Snapshot Builder '1m OHLCV'"]
+    TWAP["TWAP/VWAP Engine"]
+    QTE["Quote Engine"]
+    ATST["Attestation Signer"]
+    EVT["Event Dispatcher"]
+    DB["MongoDB 'timeseries'"]
+    RDS["Redis 'cache, rate, jobs'"]
+    WRK["Workers 'pollers, builders, webhooks'"]
   end
 
-  subgraph "External Providers"
-    CEX["Centralized Feeds"]
-    DEX["On-chain/DEX Feeds"]
-    ORC["Oracle Bridges"]
+  subgraph "Providers"
+    CG["HTTP 'CoinGecko'"]
+    BIN["HTTP 'Binance'"]
+    CB["HTTP 'Coinbase'"]
+    DEX["HTTP 'DEX Aggregators'"]
   end
 
-  PH -->|snapshots, twap for CFB| API
-  PAY -->|quotes for convert| API
-  WAT -->|charts, alerts| API
-  WEB -->|public charts| API
-  ADM -->|asset registry, providers| API
+  SVC -->|spot, snapshot, quote, attest| API
+  ADM -->|configure assets, providers, weights| API
 
-  API --> AGG
-  API --> CACHE
+  API --> REG
+  API --> CFG
+  API --> QTE
+  API --> ATST
+  API --> SNAP
   API --> DB
-  AGG --> SIG
-  JOB --> AGG
-  JOB --> DB
-  JOB --> CACHE
-  AGG --> EVT
-  JOB --> CEX
-  JOB --> DEX
-  JOB --> ORC
+  API --> RDS
+  WRK --> COL
+  COL --> NORM
+  NORM --> AGG
+  AGG --> SNAP
+  SNAP --> TWAP
+  TWAP --> DB
+  SNAP --> DB
+  QTE --> AGG
+  ATST --> CFG
+  EVT --> SVC
+
+  CG --> COL
+  BIN --> COL
+  CB --> COL
+  DEX --> COL
 ```
 
 *Notes:* Ingestion runs in **tg-miniapp-workers** with provider adapters. Price Service focuses on storage, aggregation, and serving signed reports. All consumers authenticate with **service JWTs**.
@@ -90,48 +103,71 @@ flowchart LR
 
 ## 4) Data Flows
 
-### 4.1 TWAP Query from PlayHub
+### 4.1 1‑minute snapshot build
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant JOB as Ingestor
-  participant API as Price API
-  participant AGG as Aggregator
-  participant DB as Store
-  participant EVT as Events
-
-  JOB->>AGG: pull ticks from providers
-  AGG->>DB: upsert Snapshot1m for each market
-  AGG->>AGG: recompute OHLCV, TWAP caches
-  AGG->>EVT: publish price.snapshot.1m.created
-  API->>AGG: warm cache on hot markets
+  participant WRK as "Worker"
+  participant COL as "Collectors"
+  participant AGG as "Aggregator"
+  participant DB as "DB"
+  WRK->>COL: poll providers for markets at t
+  COL-->>WRK: ticks []
+  WRK->>AGG: normalize, outlier filter, weight
+  AGG->>DB: write TICK ring buffer
+  AGG->>DB: upsert SNAPSHOT_1M for minute
+  AGG-->>WRK: quality metric
 ```
 
-Rules: integer math only; rounding down; clearly defined window alignment and padding when bars are missing. If quorum below threshold, TWAP returns status degraded and PlayHub may treat it as push in CFB.
+### 4.2 Attested price for PlayHub CFB
 
-### 4.2 Ingestion from Workers
 ```mermaid
 sequenceDiagram
-  participant PH as PlayHub
-  participant API as Price API
-  PH->>API: GET /v1/snapshots/1m?market=BTC-USDT&minute=2025-09-26T10:00:00Z
-  API-->>PH: 200 snapshot with sig
-  PH->>API: GET /v1/snapshots/1m?market=BTC-USDT&minute=2025-09-26T13:00:00Z
-  API-->>PH: 200 snapshot with sig
-  Note over PH,API: PlayHub compares open vs close for CFB
+  autonumber
+  participant PH as "PlayHub"
+  participant API as "Price API"
+  participant DB as "DB"
+  PH->>API: POST /v1/attest {{ base, quote, at }}
+  API->>DB: lookup SNAPSHOT_1M at minute
+  alt found
+    API->>API: build payload, sign with Ed25519
+    API-->>PH: 200 {{ price, minute, sig, alg, payloadHash }}
+  else not found
+    API-->>PH: 404 snapshot_not_found
+  end
 ```
-Workers call approved providers on schedules like each minute and pass normalized ticks.
 
-### 4.3 Rate Snapshot for Funding
+### 4.3 Payhub conversion quote
+
 ```mermaid
 sequenceDiagram
-  participant PAY as Payhub
-  participant API as Price API
-  PAY->>API: POST /internal/v1/quotes (from,to,amountFrom,tolerance, Idem-Key)
-  API->>API: compute route and rate
-  API-->>PAY: 200 quote with expiresAt and sig
+  autonumber
+  participant PAY as "Payhub"
+  participant API as "Price API"
+  PAY->>API: POST /v1/quote {{ base, quote, amount }}
+  API->>API: compute rate from latest snapshot or TWAP
+  API-->>PAY: 200 {{ rate, expiresAt }}
 ```
+
+### 4.4 Provider degradation and recovery
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant WRK as "Worker"
+  participant COL as "Collectors"
+  participant EVT as "Event Bus"
+  WRK->>COL: health check
+  COL-->>WRK: high error ratio
+  WRK->>WRK: open circuit, reduce weight to 0
+  WRK->>EVT: emit price.provider.degraded
+  Note over WRK: periodic retry
+  COL-->>WRK: healthy
+  WRK->>WRK: close circuit, restore weight
+  WRK->>EVT: emit price.provider.recovered
+```
+
 ---
 
 ## 5) Calculation Policies

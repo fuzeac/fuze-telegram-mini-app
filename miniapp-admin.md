@@ -10,51 +10,80 @@
 ## 1) Architecture Diagram (HLD)
 ```mermaid
 flowchart LR
-  subgraph Operator
-    OP[Admin User]:::client
+  subgraph "Operators"
+    OP["Admins & Reviewers"]
   end
 
-  subgraph Admin
-    UI[Admin UI]:::svc
-    BFF[Admin API BFF]:::svc
-    CACHE[(Redis sessions and rate limits)]:::cache
-    DB[(MongoDB audit and admin prefs)]:::db
+  subgraph "Admin Console"
+    UI["Admin SPA 'React/Next.js'"]
+    BFF["Admin API (BFF)"]
+    AUTH["SSO + MFA"]
   end
 
-  subgraph Core Services
-    IDP[Identity]:::peer
-    PAY[Payhub]:::peer
-    PLAY[PlayHub]:::peer
-    WATCH[Watchlist]:::peer
-    CAMP[Campaigns]:::peer
-    FUND[Funding]:::peer
-    ESC[Escrow]:::peer
-    EVTS[Events]:::peer
-    PRICE[Price Service]:::peer
-    WORK[Workers]:::peer
+  subgraph "Core Services"
+    ID["Identity"]
+    PAY["Payhub"]
+    PH["PlayHub"]
+    FUN["Funding"]
+    WATCH["Watchlist"]
+    CAMP["Campaigns"]
+    EV["Events"]
+    PRICE["Price Service"]
+    CFG["Config Service"]
   end
 
-  OP -->|browser https| UI
-  UI -->|REST calls| BFF
-  BFF -->|verify roles| IDP
-  BFF --> CACHE
+  subgraph "Admin Internals"
+    POL["Policy Manager"]
+    RBAC["RBAC & Org Admin"]
+    KYCQ["KYC/Badge Review Queue"]
+    TRES["Treasury Ops Orchestrator"]
+    METER["Meters & Pricing Plans"]
+    WH["Webhooks Registry"]
+    FF["Feature Flags & Banners"]
+    AUD["Audit Log"]
+    DB["MongoDB"]
+    RDS["Redis (rate limit, cache, jobs)"]
+    EVT["Event Bus / Dispatcher"]
+    WRK["Workers & Schedulers"]
+    SIG["Signing (HMAC/Ed25519)"]
+  end
+
+  OP -->|browser| UI
+  UI --> BFF
+  UI --> AUTH
+
+  BFF --> POL
+  BFF --> RBAC
+  BFF --> KYCQ
+  BFF --> TRES
+  BFF --> METER
+  BFF --> WH
+  BFF --> FF
+  BFF --> AUD
   BFF --> DB
+  BFF --> RDS
+  WRK --> DB
+  WRK --> EVT
 
-  BFF --> PAY
-  BFF --> PLAY
-  BFF --> CAMP
-  BFF --> WATCH
-  BFF --> FUND
-  BFF --> ESC
-  BFF --> EVTS
-  BFF --> PRICE
-  BFF --> WORK
+  %% Cross-service calls (signed S2S)
+  POL --> CFG
+  METER --> CFG
+  FF --> CFG
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
+  KYCQ --> ID
+  TRES --> PAY
+  TRES --> PH
+  TRES --> FUN
+  WH --> ID
+  WH --> PAY
+  WH --> PH
+  WH --> FUN
+  WH --> WATCH
+  WH --> CAMP
+  WH --> EV
+
+  SIG --> ID
+  SIG --> PAY
 ```
 *Notes:* The BFF signs **service‑to‑service** requests with a service JWT. All privileged mutations require **capability checks** on the staff role and may require **two approvals** before execution (e.g., withdrawals, manual credits, forced settles).
 
@@ -105,63 +134,73 @@ flowchart LR
 ---
 
 ## 5) Critical Flows
+### 5.1 Badge policy update → propagate
 
-### 5.1 Staff Login
 ```mermaid
 sequenceDiagram
-participant OP as Operator
-participant UI as Admin UI
-participant BFF as Admin BFF
-participant IDP as Identity
-OP->>UI: Open admin site
-UI->>BFF: Start login
-BFF->>IDP: OIDC or staff token exchange
-IDP-->>BFF: Staff identity and roles
-BFF-->>UI: Session cookie and profile
+  autonumber
+  participant OP as "Operator"
+  participant UI as "Admin UI"
+  participant ADM as "Admin API"
+  participant CFG as "Config Service"
+  participant EVT as "Event Bus"
+  OP->>UI: Edit Investor policy, submit
+  UI->>ADM: POST /admin/v1/badge-policies { badgeType, thresholds }
+  ADM->>ADM: validate RBAC, write policy, version++
+  ADM->>CFG: PUT /internal/v1/config/badges { versioned policy } (signed)
+  CFG-->>ADM: 200 ok
+  ADM->>EVT: publish admin.policy.updated
+  ADM-->>UI: 201 created
 ```
 
-### 5.2 Two‑Person Approval (example: Manual Deposit Credit)
-```mermaid
-sequenceDiagram
-participant UI as Admin UI
-participant BFF as Admin BFF
-participant PAY as Payhub
-UI->>BFF: Request manual credit with user id and amount
-BFF->>BFF: Create ApprovalRequest status pending
-UI-->>BFF: Second approver approves
-BFF->>PAY: Post deposit credit with correlation id
-PAY-->>BFF: OK with deposit id
-BFF->>BFF: Mark approval executed and write audit
-BFF-->>UI: Success with receipt
-```
-*Policy:* requester cannot approve their own request. Expire pending requests after a timeout.
+### 5.2 KYC/Badge review (approve)
 
-### 5.3 CFB Oversight and Safe Force Settle
 ```mermaid
 sequenceDiagram
-participant UI as Admin UI
-participant BFF as Admin BFF
-participant PH as PlayHub
-UI->>BFF: Request CFB recompute or force settle
-BFF->>BFF: Check capabilities and approval policy
-BFF->>PH: Call internal route for recompute or settle
-PH-->>BFF: OK with result status
-BFF->>BFF: Write audit with bet id and request id
-BFF-->>UI: Result summary
+  autonumber
+  participant OP as "Reviewer"
+  participant UI as "Admin UI"
+  participant ADM as "Admin API"
+  participant ID as "Identity"
+  participant EVT as "Event Bus"
+  OP->>UI: Open review, approve
+  UI->>ADM: POST /admin/v1/kyc/reviews { applicationId, decision: approve }
+  ADM->>ID: POST /internal/v1/kyc/{applicationId}/decision { approve } (signed)
+  ID-->>ADM: 200 ok
+  ADM->>ADM: record REVIEW_ACTION, update KYC_REVIEW
+  ADM->>EVT: publish admin.kyc.decision
+  ADM-->>UI: 202 queued
 ```
 
-### 5.4 Withdrawal Review
+### 5.3 Treasury manual credit (two-man rule)
+
 ```mermaid
 sequenceDiagram
-participant UI as Admin UI
-participant BFF as Admin BFF
-participant PAY as Payhub
-UI->>BFF: Approve withdrawal request
-BFF->>BFF: Two‑person approval check
-BFF->>PAY: Approve withdrawal
-PAY-->>BFF: Paid
-BFF->>BFF: Audit and return receipt
-BFF-->>UI: Success
+  autonumber
+  participant OP1 as "Operator A"
+  participant OP2 as "Operator B"
+  participant ADM as "Admin API"
+  participant PAY as "Payhub"
+  OP1->>ADM: POST /admin/v1/treasury/credits { userId, amount, ref } (Idem)
+  ADM->>ADM: create TREASURY_REQUEST state=pending, record OP1
+  OP2->>ADM: POST /admin/v1/treasury/requests/{id}/approve
+  ADM->>PAY: POST /internal/v1/credits { user, amount, ref } (signed)
+  PAY-->>ADM: 200 receiptId
+  ADM->>ADM: mark executed, record TREASURY_APPROVAL
+  ADM-->>OP2: 200 executed
+```
+
+### 5.4 Webhook endpoint rotation
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant OP as "Operator"
+  participant ADM as "Admin API"
+  participant SVC as "Service"
+  OP->>ADM: POST /admin/v1/webhooks { service, url, secret }
+  ADM->>ADM: upsert WEBHOOK_ENDPOINT
+  ADM-->>SVC: notify via admin.webhook.updated
 ```
 
 ---

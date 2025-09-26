@@ -84,33 +84,40 @@ flowchart LR
 ---
 
 ## 2) Technology Stack
-| Layer | Choice | Rationale |
+
+| Layer | Choice | Notes |
 |---|---|---|
-| Runtime | Nodejs 20 plus TypeScript | Shared platform stack |
-| Framework | Express plus Zod | Predictable schemas and errors |
-| Storage | MongoDB transactions | Per currency accounts and ledger entries |
-| Cache | Redis | Idempotency, locks, and rate limits |
-| Auth | jose Ed25519 JWT | Service to service auth |
-| Telemetry | OpenTelemetry plus Pino | Tracing and structured logs |
-| Deploy | Docker plus Helm | Uniform CI and CD |
+| Runtime | Node.js 20 + TypeScript | Uniform across platform |
+| API | Fastify + Zod + OpenAPI 3.1 | Strict request/response validation |
+| Data | MongoDB (replica set) | Double-entry ledger, balances, holds, settlements, w/d, deposits, invoices |
+| Cache/Jobs | Redis + BullMQ | Idempotency, queues, DLQ, schedulers |
+| Cryptography | Ed25519 (jose), HMAC-SHA256 | JWT verify, webhook signatures |
+| Keys | Cloud KMS or HSM | Withdrawal signing keys, rotation |
+| Chain | Ethereum JSON-RPC, ERC-20 | USDT and FUZE on EVM networks |
+| Observability | OpenTelemetry, Prometheus, Loki | RED/USE dashboards |
+| CI/CD | Docker, Helm, Argo CD | Blue/green deploy |
+| Timezone | Presentation GMT+7, system UTC | Consistent timestamps |
 
 ---
 
 ## 3) Responsibilities and Scope
 **Owns**
-- **Accounts**: per user per currency balances with available and locked.  
-- **Ledger**: append‑only double entry journal per movement with correlation id.  
-- **Holds**: create and cancel holds that reduce available balance.  
-- **Settlements**: settle holds to **win** or **loss** and move funds accordingly.  
-- **Deposits**: credit from platform treasuries or external providers (MVP manual credit).  
-- **Withdrawals**: request, review, and approve; debit to external addresses or off platform (MVP manual).  
-- **Conversions**: optional internal FX between platform currencies using provided quotes.  
+- **Custody (off‑chain)** for STAR, FZ, PT with internal ledger and balances.
+- **Holds and settlements** for platform services (matchmaking bets, CFB, escrow, funding).
+- **Deposits and withdrawals** for ERC‑20 **USDT** and **FUZE** via Web3 Portal, signed by hot wallet with KMS control.
+- **Conversion** and pricing snapshots between STAR/FZ/PT and USDT reference (via Price Service).
+- **Overage billing**: issue invoices, accept payment in **FZ/PT**, coupons, prepaid credits.
+- **Limits & risk**: daily withdrawal caps, velocity checks, sanctions blocklist via Identity/Config.
+- **Events & audit** for financial actions.
 
-**Out of scope**
-- Business decisions (who wins, bet logic, escrow dispute) — decided by domain services.  
-- External custody or blockchain integration in MVP (future adapters).  
-- End user UI — handled by WebApp via domain services or Admin BFF.
+**Collaborates**
+- Identity (badges/KYC, org roles), Config (fees, limits, tax), Price Service (quotes), Shared (ids, signatures).
 
+**Explicit non-goals**
+- On‑chain market-making, DEX routing, fiat rails, KYC document storage.
+
+**SLAs**
+- Create hold P95 ≤ 120 ms, Settle P95 ≤ 200 ms (ex‑RPC), Withdrawal create P95 ≤ 250 ms.
 ---
 
 ## 4) Data Flows

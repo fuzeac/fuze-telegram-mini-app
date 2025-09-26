@@ -10,45 +10,52 @@
 ## 1) Architecture Diagram
 ```mermaid
 flowchart LR
-  subgraph Clients
-    WEB[Telegram WebApp - Nextjs]:::client
-    ADMIN[Admin Console - Staff]:::client
+  subgraph "Clients"
+    TG["Telegram WebApp"]
+    W3["Web3 Portal"]
+    ADM["Admin Console"]
   end
 
-  subgraph Escrow
-    API[/Public REST API\nhealthz and readyz/]:::svc
-    ENGINE[Contract Engine and State Machine]:::logic
-    DISPUTE[Dispute Handling and Evidence Log]:::logic
-    DB[(MongoDB - Offer EscrowContract Dispute Evidence Audit)]:::db
-    CACHE[(Redis - locks idem rate limits)]:::cache
+  subgraph "Escrow Service"
+    API["REST API v1"]
+    ENG["Escrow Contract Engine"]
+    MATCH["P2P Matcher"]
+    DIS["Dispute Manager"]
+    FEE["Fee Calculator"]
+    EVT["Event Dispatcher"]
+    DB["MongoDB"]
+    RDS["Redis 'cache, rate, jobs'"]
+    WRK["Workers 'schedulers'"]
   end
 
-  subgraph Core Services
-    IDP[Identity - JWKS and profiles]:::peer
-    PAY[Payhub - holds and settlements]:::peer
-    WORK[Workers - timeouts recon DLQ]:::peer
-    CFG[Config - limits fees flags]:::peer
+  subgraph "Platform Services"
+    ID["Identity"]
+    PAY["Payhub"]
+    CFG["Config Service"]
+    PRICE["Price Service"]
+    ADMIN["Admin Service"]
   end
 
-  WEB -->|browse offers create accept| API
-  ADMIN -->|arbitrate disputes| API
+  TG -->|browse, create, accept, release| API
+  W3 -->|browse, accept| API
+  ADM -->|dispute review, policy| API
 
-  API --> ENGINE
-  API --> DISPUTE
+  API --> ENG
+  API --> MATCH
+  API --> DIS
+  API --> FEE
   API --> DB
-  API --> CACHE
+  API --> RDS
+  WRK --> ENG
+  WRK --> DIS
+  WRK --> EVT
 
-  ENGINE --> PAY
-  DISPUTE --> PAY
-  CFG --> Escrow
-  WORK -->|expire and retry| API
-
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
+  %% Cross services
+  API --> ID
+  ENG --> PAY
+  FEE --> CFG
+  DIS --> ADMIN
+  API --> PRICE
 ```
 *Notes:* Escrow **never** mutates balances directly. All value movement is via Payhub: **holds** when a contract is opened and **settlements** when it is completed or adjudicated. Evidence attachments are stored via object storage in infra with signed URLs, referenced by Escrow documents.
 
@@ -85,67 +92,75 @@ flowchart LR
 
 ## 4) State Machine and Flows
 
-### 4.1 Contract State Machine
-```mermaid
-stateDiagram-v2
-  [*] --> opened
-  opened --> funded: buyer funds hold
-  funded --> delivered: seller delivers
-  delivered --> confirmed: buyer confirms
-  confirmed --> released: auto release funds
-  opened --> cancelled: cancel timeout or explicit
-  funded --> disputed: buyer or seller disputes
-  delivered --> disputed
-  disputed --> adjudicated: admin resolves
-  adjudicated --> released: settle per decision
-```
-**Settlement rules**  
-- **confirmed**: buyer hold settles `win` to seller; optional seller bond `win` back to seller.  
-- **cancelled**: release any buyer hold; seller bond, if present, `win` back to seller.  
-- **adjudicated**: admin selects winner; buyer hold settles to winner, bond settles accordingly.
+### 4.1 Create order → Accept → Hold → Release
 
-### 4.2 Funding and Release Flow
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant ESC as Escrow
-participant PAY as Payhub
-UI->>ESC: POST /v1/escrows { offerId amount } + Idem
-ESC-->>UI: 201 { escrowId, status: opened }
-UI->>ESC: POST /v1/escrows/:id/fund + Idem
-ESC->>PAY: create hold for buyer amount
-PAY-->>ESC: 200 { holdId }
-ESC-->>UI: 200 { status: funded }
+  autonumber
+  participant UI as "Client"
+  participant ES as "Escrow API"
+  participant ID as "Identity"
+  participant PAY as "Payhub"
+  participant CFG as "Config"
+  UI->>ES: POST /v1/orders { side, currency, minAmount, maxAmount } (Idem)
+  ES->>ID: check badge 'Trader'
+  alt ok
+    ES->>CFG: fetch fee%, free limits
+    ES-->>UI: 201 created
+  else
+    ES-->>UI: 403 badge_required
+  end
+
+  UI->>ES: POST /v1/escrows { orderId, amount } (Idem)
+  ES->>PAY: create hold for buyer amount, fee in FZ/PT if over free limit
+  alt hold ok
+    ES-->>UI: 200 { escrowId, status: funded }
+  else insufficient
+    ES-->>UI: 409 insufficient_funds_or_conflict
+  end
+
+  UI->>ES: POST /v1/escrows/{{id}}/release
+  ES->>PAY: settle hold outcome win, transfer net to seller, fee to treasury
+  PAY-->>ES: receiptId
+  ES-->>UI: 200 released
 ```
 
-### 4.3 Delivery and Confirmation
+### 4.2 Cancel / Expire
+
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant ESC as Escrow
-participant PAY as Payhub
-UI->>ESC: POST /v1/escrows/:id/deliver { ref }
-ESC-->>UI: 200 { status: delivered }
-UI->>ESC: POST /v1/escrows/:id/confirm + Idem
-ESC->>PAY: settle buyer hold outcome win to seller
-PAY-->>ESC: 200 { settlementId }
-ESC-->>UI: 200 { status: released }
+  autonumber
+  participant WR as "Worker"
+  participant ES as "Escrow API"
+  participant PAY as "Payhub"
+  WR->>ES: detect expired or canceled escrow
+  ES->>PAY: settle outcome loss (refund to buyer)
+  PAY-->>ES: receiptId
+  ES->>ES: log ESCROW_EVENT, update status=canceled
 ```
 
-### 4.4 Dispute and Arbitration
+### 4.3 Dispute → Decision
+
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant ESC as Escrow
-participant ADM as Admin
-participant PAY as Payhub
-UI->>ESC: POST /v1/escrows/:id/dispute { reason }
-ESC-->>UI: 200 { disputeId, status: open }
-ADM->>ESC: POST /admin/v1/disputes/:id/resolve { winner }
-ESC->>PAY: settle per decision
-PAY-->>ESC: 200 ok
-ESC-->>UI: 200 { status: adjudicated }
+  autonumber
+  participant UI as "Client"
+  participant ES as "Escrow API"
+  participant AD as "Admin Service"
+  participant PAY as "Payhub"
+  UI->>ES: POST /v1/escrows/{{id}}/disputes { reason }
+  ES->>ES: create DISPUTE, lock state=disputed
+  AD->>ES: POST /admin/v1/disputes/{{id}}/decision { decision }
+  alt release_to_seller
+    ES->>PAY: settle win to seller
+  else refund_to_buyer
+    ES->>PAY: settle loss to refund
+  else split
+    ES->>PAY: custom settlement
+  end
+  ES->>ES: record decision, close dispute
 ```
+
 
 ---
 

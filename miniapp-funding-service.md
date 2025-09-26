@@ -8,50 +8,63 @@
 ---
 
 ## 1) Architecture Diagram
+
 ```mermaid
 flowchart LR
-  subgraph Clients
-    WEB[Telegram WebApp - Nextjs]:::client
-    ADMIN[Admin Console - Staff]:::client
+  subgraph "Clients"
+    TG["Telegram WebApp"]
+    W3["Web3 Portal"]
+    ADM["Admin Console"]
   end
 
-  subgraph Funding
-    API[/Public REST API\nhealthz and readyz/]:::svc
-    ENGINE[Sale Engine and Allocations]:::logic
-    VEST[Vesting Scheduler]:::logic
-    DB[(MongoDB - Sale Tier Whitelist Purchase Allocation Vesting Audit)]:::db
-    CACHE[(Redis - idem locks rate limits)]:::cache
+  subgraph "Funding Service"
+    API["REST API v1"]
+    EVAL["Evaluation Engine"]
+    VOTE["Voting Manager"]
+    SALE["Sale Manager"]
+    PUR["Purchase Engine"]
+    VEST["Vesting Manager"]
+    EVT["Event Dispatcher"]
+    DB["MongoDB"]
+    RDS["Redis cache, jobs"]
+    WRK["Workers schedulers"]
   end
 
-  subgraph Core Services
-    IDP[Identity - JWKS profiles referrals]:::peer
-    PAY[Payhub - holds settlements conversions]:::peer
-    PRICE[Price Service - quotes and bars]:::peer
-    WORK[Workers - unlocks retries DLQ]:::peer
-    CFG[Config - flags limits]:::peer
+  subgraph "Platform Services"
+    ID["Identity"]
+    PAY["Payhub"]
+    PRICE["Price Service"]
+    CFG["Config Service"]
+    ADMIN["Admin Service"]
   end
 
-  WEB -->|browse purchase claim| API
-  ADMIN -->|create publish manage| API
+  TG -->|submit project, browse, purchase| API
+  W3 -->|browse, purchase| API
+  ADM -->|review dashboards, overrides| API
 
-  API --> ENGINE
+  API --> EVAL
+  API --> VOTE
+  API --> SALE
+  API --> PUR
   API --> VEST
   API --> DB
-  API --> CACHE
+  API --> RDS
+  WRK --> EVAL
+  WRK --> VOTE
+  WRK --> SALE
+  WRK --> PUR
+  WRK --> VEST
+  WRK --> EVT
 
-  ENGINE --> PAY
-  ENGINE --> PRICE
+  API --> ID
+  PUR --> PAY
   VEST --> PAY
-  CFG --> Funding
-  WORK -->|vesting unlock and retries| API
-
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
+  API --> PRICE
+  API --> CFG
+  ADMIN --> API
+  EVT --> ADMIN
 ```
+
 *Notes:* Funding owns sale metadata and allocation math. Purchases place **holds** or perform **deposit credits** via Payhub depending on flow. Vesting creates scheduled **grants** and releases as credits over time. Identity referral codes can apply bonus allocations or whitelist priority per config.
 
 ---
@@ -88,41 +101,92 @@ flowchart LR
 
 ## 4) Data Flows
 
-### 4.1 Purchase Flow (hold then capture)
+### 4.1 Project submission → AI scoring → Voting → Decision
+
 ```mermaid
 sequenceDiagram
-participant UI as WebApp
-participant FUN as Funding
-participant PAY as Payhub
-UI->>FUN: POST /v1/sales/:id/purchase with currency and amount + Idem
-FUN->>FUN: Validate sale window, caps, whitelist, tier
-FUN->>PAY: Create hold for amount
-PAY-->>FUN: 200 holdId
-FUN->>FUN: Compute units = floor(amount / price)
-FUN->>FUN: Apply referral bonus if any
-FUN-->>UI: 200 purchaseId and status pending with units
-Note over FUN: On finalize or at end of window
-FUN->>PAY: Settle hold outcome win to treasury
-PAY-->>FUN: 200 settlementId
-FUN->>FUN: Mark purchase paid and update allocation and vesting
-```
-### 4.2 Vesting Release
-```mermaid
-sequenceDiagram
-participant WRK as Workers
-participant FUN as Funding
-participant PAY as Payhub
-WRK->>FUN: POST /internal/v1/vesting/release { saleId, userId }
-FUN->>FUN: Compute releasable units
-alt units > 0
-  FUN->>PAY: deposits credit treasury->user amount for releasable units
-  PAY-->>FUN: 200 { refId }
-  FUN->>FUN: Update VestingSchedule and Allocation claimed units
-end
+  autonumber
+  participant UI as "Client"
+  participant FN as "Funding API"
+  participant ID as "Identity"
+  participant CF as "Config Service"
+  participant WR as "Workers"
+  UI->>FN: POST /v1/projects { title, summary, metadata } (Idem)
+  FN->>ID: verify badge 'Project Owner'
+  alt badge ok
+    FN->>CF: fetch thresholds and window
+    FN->>FN: create PROJECT and EVALUATION, state=submitted
+    FN-->>UI: 201 Created
+    WR->>FN: start AI scoring job
+    FN->>FN: aiScore = 0..50
+    alt aiScore > 40
+      FN->>FN: open voting, set windowEnd = now + 5d
+    else
+      FN->>FN: reject, state=rejected_ai
+    end
+  else no badge
+    FN-->>UI: 403 Forbidden
+  end
+  WR->>FN: on windowEnd, compute finalScore and decision
+  FN->>FN: decision approved if finalScore >= 75
 ```
 
-### 4.3 Refunds
-- If a purchase is refundable (policy or failure), Admin triggers refund: Funding settles hold with `loss` or issues a negative credit by agreement; updates Allocation accordingly. All refunds audited.
+### 4.2 Preview → Hold → Settle with cap and Investor bypass
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant UI as "Client"
+  participant FN as "Funding API"
+  participant ID as "Identity"
+  participant PR as "Price Service"
+  participant PY as "Payhub"
+  UI->>FN: POST /v1/sales/{{saleId}}/preview { currency, amount }
+  FN->>ID: check badges 'Investor' for cap bypass
+  FN->>PR: convert amount to USDT equivalent
+  alt cap exceeded and not Investor
+    FN-->>UI: 403 cap_exceeded with remaining headroom
+  else ok
+    UI->>FN: POST /v1/sales/{{saleId}}/purchase { currency, amount } (Idem)
+    FN->>PY: create hold for amount in STAR/FZ/PT
+    alt hold ok
+      FN-->>UI: 200 {{ purchaseId, status: pending }}
+    else insufficient funds
+      FN-->>UI: 409 insufficient_funds
+    end
+  end
+  Note over FN: Workers finalize settlements at sale end
+```
+
+### 4.3 Vesting unlock
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant WR as "Worker"
+  participant FN as "Funding API"
+  participant PY as "Payhub"
+  WR->>FN: scan due VESTING by unlockAt
+  FN->>PY: credit off‑chain entitlement, record receipt
+  PY-->>FN: receiptId
+  FN->>FN: mark VESTING status=unlocked
+```
+
+### 4.4 Non-happy paths
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant FN as "Funding API"
+  participant PY as "Payhub"
+  participant PR as "Price Service"
+  FN->>PR: convert amount at hold time
+  PR-->>FN: timeout
+  FN->>FN: fallback to cached snapshot if age < cfg.maxCacheAge, else return 503 retryable
+  FN->>PY: create hold
+  PY-->>FN: 429 rate limited
+  FN->>FN: retry with backoff, circuit break after threshold
+```
 
 ---
 

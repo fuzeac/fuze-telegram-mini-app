@@ -211,13 +211,16 @@ sequenceDiagram
 
 ## 5) Accounting Model
 
-- **Double entry**: every movement is recorded with a **debit** and a **credit** entry between two accounts.  
-- **Holds**: reduce `available` and increase `locked` on the **holder** account; no ledger entries until settlement.  
-- **Settlement win**: decrease holder `locked`, increase winner `available`; write two ledger entries: `hold_release` and `settlement_win`.  
-- **Settlement loss**: decrease holder `locked`, increase **treasury** `available`.  
-- **Release**: decrease `locked`, increase `available` on the same account.  
-- **Fees**: optional fee basis points charged to the **winner** and credited to **treasury**.  
-- **Conversions**: two ledger entries for the buy and fee; rate snapshot id recorded.
+- **Currencies**: STAR, FZ, PT (off‑chain), USDT, FUZE (on‑chain). Balances maintained per currency.  
+- **Fees**: config driven percentage + fixed. Withdrawal fee may be network or flat. Fees posted as separate ledger entries to treasury account.  
+- **Holds**: reduce `available`, increase `pending`; expire by TTL, auto‑release.  
+- **Settlement**: `win` moves pending to counterparty, `loss` releases to owner, `split` distributes per request.  
+- **Quotas & overage**: free monthly limits — withdrawals count, conversions count, internal transfers count; on exceed, create invoice priced in FZ/PT; coupons and prepaid applied first.  
+- **Badges/KYC gates**:  
+  - Withdrawals: **Verified** badge required, large amounts require **Pro** badge.  
+  - High‑velocity internal transfers may require **Investor** or **Trader** depending on service context.  
+- **Idempotency**: all POST accept `Idempotency-Key`; duplicate returns original result.  
+- **Pricing snapshots**: conversions use Price Service rate with expiry.
 
 All operations are transactional and idempotent per `Idempotency-Key`.
 

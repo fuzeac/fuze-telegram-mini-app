@@ -8,56 +8,69 @@
 ---
 
 ## 1) Architecture Diagram
+
 ```mermaid
 flowchart LR
-  subgraph Clients
-    TG[Telegram App and JS SDK]:::ext
-    WEB[Telegram WebApp - Nextjs]:::client
-    ADMIN[Admin Console - Staff]:::client
+  subgraph "Clients"
+    TG["Telegram WebApp"]
+    W3["Web3 Portal"]
+    ADM["Admin Console"]
+    SRV["Internal Services"]
   end
 
-  subgraph Identity
-    API[/Public REST API\nhealthz and readyz/]:::svc
-    AUTH[Auth Engine and Token Issuer]:::logic
-    PROF[Profiles and Roles]:::logic
-    REF[Referrals and Links]:::logic
-    DB[(MongoDB - User Session Role Referral Area Pref Audit)]:::db
-    CACHE[(Redis - rate limits sessions idem)]:::cache
-    JWKS[Public JWKS Endpoint]:::edge
+  subgraph "Identity Service"
+    API["REST API v1"]
+    AUTH["Auth Core"]
+    SIWE["SIWE Verifier"]
+    TGX["Telegram Linker"]
+    BAD["Badges Engine"]
+    KYC["KYC Orchestrator"]
+    TOK["Service Tokens"]
+    OIDC["OIDC Provider"]
+    EVT["Event Dispatcher"]
+    DB["Postgres 'users, sessions, badges, kyc'"]
+    RDS["Redis 'nonce, rate, idempotency'"]
+    WRK["Workers 'reviews, expiries, webhooks'"]
   end
 
-  subgraph Core Services
-    PLAY[PlayHub Service]:::peer
-    PAY[Payhub Service]:::peer
-    WATCH[Watchlist Service]:::peer
-    CAMP[Campaigns Service]:::peer
-    EVTS[Events Service]:::peer
-    ADMINBFF[Admin BFF]:::peer
+  subgraph "Platform Services"
+    CFG["Config Service"]
+    ADMAPI["Admin Service"]
+    PAY["Payhub Service"]
   end
 
-  TG -->|initData| WEB
-  WEB -->|POST v1 auth telegram| API
+  subgraph "External Providers"
+    TGBOT["Telegram Bot API"]
+    KYCEXT["KYC Provider"]
+    EMAIL["Email/SMS"]
+  end
+
+  TG -->|login, link wallet, badges| API
+  W3 -->|SIWE, sessions, roles| API
+  ADM -->|review, suspend, roles| API
+  SRV -->|introspect, mint service token| API
+
   API --> AUTH
-  API --> PROF
-  API --> REF
+  API --> SIWE
+  API --> TGX
+  API --> BAD
+  API --> KYC
+  API --> TOK
+  API --> OIDC
+  API --> EVT
   API --> DB
-  API --> CACHE
-  JWKS --> PLAY
-  JWKS --> PAY
-  JWKS --> WATCH
-  JWKS --> CAMP
-  JWKS --> EVTS
-  JWKS --> ADMINBFF
+  API --> RDS
+  WRK --> BAD
+  WRK --> KYC
+  WRK --> EVT
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef ext fill:#FFFDE7,stroke:#FBC02D;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
-  classDef edge fill:#FFFDE7,stroke:#FBC02D,stroke-dasharray:5 5;
+  API --> CFG
+  API --> ADMAPI
+  KYC --> KYCEXT
+  TGX --> TGBOT
+  EVT --> EMAIL
 ```
+
 *Notes:* Identity verifies Telegram **initData** server side, issues a session token for the WebApp, and exposes **JWKS** so other services can verify that token without calling back. Services use **service JWTs** for internal calls.
 
 ---
@@ -94,40 +107,68 @@ flowchart LR
 
 ## 4) Data Flows
 
-### 4.1 Telegram Login
+### A) SIWE login and wallet link
+
 ```mermaid
 sequenceDiagram
-participant TG as Telegram SDK
-participant WEB as WebApp
-participant IDP as Identity
-TG-->>WEB: initData via Telegram JS SDK
-WEB->>IDP: POST auth telegram with initData
-IDP->>IDP: Verify HMAC and expiry
-IDP->>IDP: Upsert user and create session
-IDP-->>WEB: 200 session token and profile
-WEB-->>Services: Use token on subsequent API calls
+  participant U as "User",
+  participant ID as "Identity",
+  U->>ID: POST /v1/session/siwe/prepare { address, chainId, domain },
+  ID-->>U: 200 { nonce, message, expiresAt },
+  U->>ID: POST /v1/session/siwe/verify { signature, message },
+  alt first time wallet
+    ID->>ID: create USER and WALLET,
+  else existing user
+    ID->>ID: rotate session,
+  end
+  ID-->>U: 200 { session, cookie }
 ```
 
-### 4.2 Referral Bind
+### B) Badge application and admin review
+
 ```mermaid
 sequenceDiagram
-participant WEB as WebApp
-participant IDP as Identity
-WEB->>IDP: POST referrals bind with referral code
-IDP->>IDP: Validate code and ensure not self or already bound
-IDP-->>WEB: 200 bound ok or 409 already bound
+  participant U as "User",
+  participant ID as "Identity",
+  participant AD as "Admin",
+  U->>ID: POST /v1/badges/{type}/apply { evidence },
+  ID-->>U: 202 accepted,
+  AD->>ID: POST /admin/v1/badges/{applicationId}/review { approve|reject },
+  alt approve
+    ID->>ID: issue BADGE state active,
+    ID-->>U: emit identity.badge.updated,
+  else reject
+    ID-->>U: record reason and notify,
+  end
 ```
 
-### 4.3 JWKS Verification by Services
+### C) KYC provider callback
+
 ```mermaid
 sequenceDiagram
-participant SVC as Service
-participant IDP as Identity
-SVC->>IDP: GET jwks json
-SVC->>SVC: Cache keys and verify session tokens locally
-SVC-->>Clients: Accept or reject requests based on verification
+  participant K as "KYC Provider",
+  participant ID as "Identity",
+  K->>ID: POST /v1/kyc/webhook { reference, state },
+  ID->>ID: verify HMAC, 
+  alt approved
+    ID->>ID: update KYC_CASE, activate related badges,
+  else rejected
+    ID->>ID: suspend or keep badges pending,
+  end
+  ID-->>K: 202 accepted
 ```
 
+### D) Service token mint and introspect
+
+```mermaid
+sequenceDiagram
+  participant S as "Internal Service",
+  participant ID as "Identity",
+  S->>ID: POST /v1/tokens/service { serviceId, subjectId, scopes, ttlSeconds },
+  ID-->>S: 201 { token },
+  S->>ID: POST /v1/introspect { token },
+  ID-->>S: 200 { active, sub, scope, exp }
+```
 ---
 
 ## 5) Security and Privacy

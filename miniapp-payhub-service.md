@@ -1,6 +1,5 @@
 # Miniapp Payhub Service
 *Version:* v0.1.0  
-*Last Updated:* 2025-09-24 03:00 +07  
 *Owner:* FUZE Platform Finance — Ledger, Holds, Settlements
 
 > High‑level architectural blueprint for the **Payhub Service**. Payhub is the **single source of truth for balances** in platform currencies (**USDT, FUZE, STAR, FZ, PT** in MVP). It provides internal primitives: **Accounts, Ledger, Holds, Settlements, Conversions, Deposits, Withdrawals**. No games or business rules live here. Domain services (PlayHub, Funding, Campaigns, Escrow) call Payhub to **lock value** and **settle outcomes**. End users never call Payhub directly — WebApp uses domain services; Admin uses a BFF.
@@ -8,68 +7,77 @@
 ---
 
 ## 1) Architecture Diagram
+
 ```mermaid
 flowchart LR
-  subgraph Callers
-    PH["PlayHub Service"]
-    FUN["Funding Service"]
-    ESC["Escrow Service"]
-    CMP["Campaigns Service"]
-    ADM["Admin Service"]
-    WEB["Telegram Mini App"]
+  subgraph "Clients"
+    TG["Telegram WebApp"]
+    W3["Web3 Portal"]
+    ADM["Admin Console"]
+    SVC["Internal Services 'Identity, PlayHub, Funding, Escrow, Campaigns, Events'"]
   end
 
   subgraph "Payhub Service"
-    API["HTTP API"]
-    LED["Double-Entry Ledger"]
-    HLD["Hold Manager"]
-    SET["Settlement Engine"]
-    FX["Conversion Engine (Quotes/Confirm)"]
+    API["REST API v1"]
+    HLD["Hold & Settlement Engine"]
+    LGR["Ledger & Balance Manager"]
+    WDR["Withdrawal Manager"]
+    DEP["Deposit Detector"]
+    CNV["Convert Engine"]
     INV["Invoices & Overage Billing"]
-    ACC["Accounts & Balances"]
-    WH["Webhooks Dispatcher"]
-    MTR["Metering"]
-    JOB["Schedulers/Workers"]
-    CCH["Redis Cache"]
+    CPT["Coupons & Prepaid"]
+    RSK["Risk & Limits"]
+    EVT["Event Dispatcher"]
     DB["MongoDB"]
-    SIG["Signing (Ed25519/HMAC)"]
+    RDS["Redis 'cache, rate, jobs'"]
+    WRK["Workers 'schedulers, watchers'"]
+  end
+
+  subgraph "External / Chain"
+    ETH["Ethereum RPC"]
+    ERC["ERC20 Contracts 'USDT, FUZE'"]
+    KMS["HSM or KMS 'signing keys'"]
+    ORA["Price Oracles 'via Price Service'"]
   end
 
   subgraph "Platform Services"
-    IDN["Identity Service"]
-    PRC["Price Service"]
+    ID["Identity"]
     CFG["Config Service"]
-    WRK["Global Workers/Dunning"]
+    PRICE["Price Service"]
+    SHD["Shared 'schemas, idempotency utils'"]
   end
 
-  subgraph "External"
-    KMS["KMS/HSM"]
-    CHA["Chain Gateways"]
-  end
+  TG -->|balances, transfer, withdraw, deposit| API
+  W3 -->|deposit, withdraw, convert| API
+  ADM -->|approve withdrawals, manage coupons| API
+  SVC -->|create holds, settle, refund, bill overage| API
 
-  PH -->|holds, settlements, rake| API
-  FUN -->|holds, settlements, treasury payout| API
-  ESC -->|holds, split payouts| API
-  CMP -->|rewards/airdrop credits| API
-  ADM -->|adjustments, webhooks, limits| API
-  WEB -->|balances, conversions, invoices| API
-
-  API --> ACC
-  API --> LED
   API --> HLD
-  API --> SET
-  API --> FX
+  API --> LGR
+  API --> WDR
+  API --> DEP
+  API --> CNV
   API --> INV
-  API --> MTR
-  API --> WH
+  API --> CPT
+  API --> RSK
+  API --> EVT
   API --> DB
-  API --> CCH
+  API --> RDS
+  WRK --> DEP
+  WRK --> WDR
+  WRK --> INV
 
-  FX --> PRC
-  INV --> WRK
-  API --> IDN
-  SIG --> KMS
-  JOB --> CHA
+  %% cross-service
+  API --> ID
+  API --> CFG
+  CNV --> PRICE
+  INV --> PRICE
+
+  %% chain
+  WDR --> KMS
+  WDR --> ETH
+  DEP --> ETH
+  CNV --> ORA
 ```
 *Notes:* Payhub performs **atomic** balance updates using Mongo transactions. All POSTs require `Idempotency-Key`. Domain services pass a **correlation id** (room id, bet id, escrow id) for traceability.
 
@@ -107,76 +115,88 @@ flowchart LR
 
 ## 4) Data Flows
 
-### 4.1 Hold then settle with 7% rake
+
+### 4.1 Create Hold → Settle Win/Loss
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant PH as PlayHub
-  participant PAY as Payhub
-  PH->>PAY: POST /internal/v1/holds (Idem-Key)
-  PAY->>PAY: Reserve funds, post journal
-  PAY-->>PH: 200 { holdId }
-  Note over PH,PAY: Later when outcome known
-  PH->>PAY: POST /internal/v1/settlements { holdId, outcome, rakePct }
-  PAY->>PAY: Compute payouts and fee
-  PAY-->>PH: 200 { settlementId, receipt }
+  participant SVC as "Caller Service"
+  participant PH as "Payhub API"
+  participant L as "Ledger"
+  SVC->>PH: POST /internal/v1/holds {{ ownerId, service, currency, amount }} (Idem)
+  PH->>L: reserve available, create HOLD status=pending
+  alt funds available
+    PH-->>SVC: 200 {{ holdId }}
+  else insufficient
+    PH-->>SVC: 409 insufficient_funds
+  end
+  SVC->>PH: POST /internal/v1/settlements {{ holdId, outcome }}
+  alt outcome win
+    PH->>L: debit hold, credit winner, write SETTLEMENT
+  else outcome loss
+    PH->>L: release hold back to owner, write SETTLEMENT
+  else split
+    PH->>L: distribute per distributions array
+  end
+  PH-->>SVC: 200 Settled
 ```
 
-### 4.2 Conversion quote then confirm with overage charge
+### 4.2 Withdrawal (KYC/badge gated)
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant UI as Client
-  participant PAY as Payhub
-  participant PRC as Price
-
-  UI->>PAY: POST /v1/conversions/quote (Idem-Key)
-  PAY->>PRC: TWAP or spot rate
-  PRC-->>PAY: rate, expiresAt
-  PAY-->>UI: 200 { quoteId, rate, expiresAt, sig }
-  UI->>PAY: POST /v1/conversions/{quoteId}/confirm
-  PAY->>PAY: Check free tier, maybe create invoice
-  alt Overage due
-    PAY-->>UI: 402 Payment Required
-  else Within free tier
-    PAY->>PAY: Post journals, update balances
-    PAY-->>UI: 200 Receipt
+  participant U as "User"
+  participant PH as "Payhub API"
+  participant ID as "Identity"
+  participant K as "KMS"
+  participant CH as "Ethereum RPC"
+  U->>PH: POST /v1/withdrawals {{ chain, token, toAddress, amount }} (Idem)
+  PH->>ID: check badge 'Verified' and limits
+  alt ok
+    PH->>PH: lock available, create WITHDRAWAL status=review
+    PH-->>U: 202 Accepted
+    PH->>K: sign tx offline
+    PH->>CH: broadcast tx
+    CH-->>PH: txHash
+    PH->>PH: update status=sent, store txId
+  else blocked
+    PH-->>U: 403 badge_or_kyc_required
   end
+  CH-->>PH: confirmations
+  PH->>PH: update status=confirmed
+  PH-->>U: status updated
 ```
 
-### 4.3 Invoice payment flow
+### 4.3 Deposit detection
 
 ```mermaid
 sequenceDiagram
-  participant UI as Client
-  participant PAY as Payhub
-
-  UI->>PAY: GET /v1/invoices/{id}
-  alt Unpaid
-    PAY-->>UI: 200 { status: open, amount, currency }
-    UI->>PAY: POST /v1/invoices/{id}/pay { currency }
-    PAY-->>UI: 200 { status: paid, receipt }
-  else Paid
-    PAY-->>UI: 200 { status: paid }
-  end
+  autonumber
+  participant WR as "Watcher"
+  participant CH as "Ethereum RPC"
+  participant PH as "Payhub API"
+  participant L as "Ledger"
+  WR->>CH: poll latest blocks
+  CH-->>WR: transfers to hot wallet with memo mapping
+  WR->>PH: notify deposit {{ txId, token, from, amount, userId }}
+  PH->>L: credit user balance, create LEDGER_ENTRY and DEPOSIT
+  PH-->>WR: 200 ok
 ```
 
-### 4.4 Webhook delivery with retry
+### 4.4 Overage invoice pay in FZ/PT
 
 ```mermaid
 sequenceDiagram
-  participant PAY as Payhub
-  participant SVC as Service
-
-  PAY->>SVC: POST /webhook { eventType, payload, ts, sig }
-  alt 2xx
-    SVC-->>PAY: 204
-  else Error
-    SVC-->>PAY: 500
-    PAY->>PAY: Schedule retry with backoff
-  end
+  autonumber
+  participant SVC as "Caller Service"
+  participant PH as "Payhub API"
+  participant L as "Ledger"
+  SVC->>PH: POST /internal/v1/invoices {{ userId, meterKey, units, unitPrice, currency }}
+  PH->>PH: create INVOICE status=unpaid
+  SVC->>PH: POST /internal/v1/invoices/{{id}}/pay {{ method: balance }}
+  PH->>L: debit FZ or PT balance, mark invoice paid, emit payhub.invoice.paid
 ```
 
 

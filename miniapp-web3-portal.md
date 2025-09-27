@@ -916,25 +916,7 @@ sequenceDiagram
 
 ---
 
-## 11. Configuration and ENV
-
-- `IDENTITY_API_URL` string
-- `PAYHUB_API_URL` string
-- `FUNDING_API_URL` string
-- `PLAYHUB_API_URL` string
-- `PRICE_API_URL` string
-- `WATCHLIST_API_URL` string
-- `EVENTS_API_URL` string
-- `CONFIG_API_URL` string
-- `WEBHOOK_HMAC_SECRET` secret
-- `SESSION_COOKIE_NAME` default "fuze_session"
-- `CSRF_SECRET` secret
-- `CHAIN_RPC_URLS_JSON` json
-- `EDGE_CACHE_TTLS_JSON` json
-
----
-
-## 12. Roadmap
+## 11. Roadmap
 
 - WalletConnect v2 and multi‑wallet profiles.
 - Realtime updates via SSE multiplexing.
@@ -943,7 +925,7 @@ sequenceDiagram
 
 ---
 
-## 13. Compatibility Notes
+## 12. Compatibility Notes
 
 - Backward compatible view models, additive only.
 - Webhook payload versions supported for one quarter.

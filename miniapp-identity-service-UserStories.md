@@ -222,7 +222,7 @@
 ## A2. RACI Matrix (capabilities)
 
 | Capability | End User | Investor | Project Owner | Staff | Compliance | Risk | Services | Config | Workers | Auditor |
-|---|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|---|---|
 | Sessions | R | R | R | I | I | I | C | I | C | I |
 | Wallet linkage | R | R | R | I | I | I | C | I | I | I |
 | Authorization decisions | I | I | I | I | I | I | A | C | I | I |

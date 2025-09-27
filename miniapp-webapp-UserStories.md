@@ -1,9 +1,4 @@
-Repo: tg-miniapp-webapp
-File: UserStories.md
-SHA-256: 8c6f1a9f23add07475dc2a3cee120234fd13cc908621775b35410e24fc79f45b
-Bytes: 21009
-Generated: 2025-09-27 01:05 GMT+7
-Sources: SystemDesign.md (authoritative), old UserStories.md (baseline), Guide
+Miniapp Webapp User Stories
 
 ---
 
@@ -363,22 +358,3 @@ Resources: `CACHE_USER, CACHE_BADGE, CACHE_SESSION, CACHE_BALANCE, CACHE_USAGE, 
 
 ---
 
-# Self‑Check — Stakeholder Coverage Report
-
-**Counts**  
-- Personas: 12  
-- Features: 20  
-- Stories: 21  
-- Stories with non‑happy paths: 19/21  
-- Entities covered in CRUD matrix: 15/15
-
-**Checklist**  
-- ✅ All personas appear in at least one story.  
-- ✅ Each entity has at least one **C**, **R**, **U**, and **D** or reasoned N/A.  
-- ✅ Every action mapped to roles/badges/KYC where applicable.  
-- ✅ Quotas & billing addressed for every chargeable action.  
-- ✅ Each story references APIs/entities/events.  
-- ✅ At least one end‑to‑end scenario per persona.  
-- ✅ Abuse/misuse cases enumerated with mitigations.  
-- ✅ Observability signals tied to AC.  
-- ✅ Localization/timezone handling present where user-visible.

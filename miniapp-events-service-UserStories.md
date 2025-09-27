@@ -214,7 +214,7 @@
 ## A2. RACI Matrix (capabilities)
 
 | Capability | Guest | Organizer | Moderator | Admin | Identity | Payhub | Config | Workers | SRE |
-|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|---|
 | Submit & edit | I | R | C | C | C | I | I | I | I |
 | Review & approve | I | I | A | C | I | I | I | I | I |
 | Publish/pause/feature | I | I | C | A | I | I | C | I | I |
@@ -231,7 +231,7 @@ Legend: R=Responsible, A=Accountable, C=Consulted, I=Informed.
 Resources: `EVENT, EVENT_SCHEDULE, VENUE, MEDIA_ASSET, CATEGORY, CATEGORY_LINK, RSVP, WAITLIST_ENTRY, CHECKIN, REMINDER, ICS, CHANGELOG, EXTERNAL_LINK, POLICY_SNAPSHOT, USAGE_METER, IDEMPOTENCY_KEY, REQUEST_LOG, JOB, DLQ`
 
 | Resource \ Persona | Guest | Organizer | Moderator | Admin | Workers | SRE |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | EVENT | R | C/R/U/D (own) | C/R/U/D | C/R/U/D | R (view) | R (view) |
 | EVENT_SCHEDULE | R | C/R/U/D (own) | C/R/U/D | C/R/U/D | R (view) | R (view) |
 | VENUE | R | C/R/U/D (own) | C/R/U/D | C/R/U/D | R (view) | R (view) |

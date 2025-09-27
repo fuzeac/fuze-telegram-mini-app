@@ -10,59 +10,87 @@
 ## 1) Architecture Diagram (HLD)
 ```mermaid
 flowchart LR
-  subgraph Developers
-    DEV[Engineers]:::client
-    OPS[Operators]:::client
+  subgraph "Clients"
+    ADM["Admin Console"]
   end
 
-  subgraph CI
-    GH[GitHub Actions]:::edge
-    REG[Container Registry]:::edge
-    CHART[Helm Chart Repo]:::edge
-    ARGO[Argo CD]:::svc
+  subgraph "Infra Service (this repo)"
+    API["REST API"]
+    GIT["Git (VCS)"]
+    CI["CI (runner)"]
+    CD["CD Controller (ArgoCD)"]
+    TF["Terraform Controller"]
+    OPA["Policy Engine (OPA)"]
+    SIG["Supply Chain Signer (cosign)"]
+    REG["Container Registry"]
+    HELM["Helm Publisher"]
+    OBS["Observability Hub"]
+    OUT["Outbox"]
+    Q["Jobs Queue"]
+    CACH["Redis Cache"]
+    DB["Postgres"]
   end
 
-  subgraph Cloud
-    DNS[DNS and TLS Certs]:::edge
-    CDN[CDN and Edge]:::edge
-    VPC[VPC Subnets NAT]:::svc
-    K8S[Kubernetes Cluster]:::svc
-    MONGO[MongoDB managed]:::db
-    REDIS[Redis managed]:::cache
-    OBJ[Object Storage configs and assets]:::db
-    SEC[Secret Manager and KMS]:::svc
-    OBS[Prometheus Loki Grafana Tempo OTEL]:::svc
+  subgraph "Platform Services"
+    IDN["Identity API"]
+    PAY["Payhub API"]
+    CFG["Config API"]
+    WRK["Workers"]
+    ADMAPI["Admin API"]
+    EVT["Events Bus"]
   end
 
-  subgraph Workloads on K8S
-    INGRESS[Ingress Controller]:::svc
-    CERTMGR[cert-manager]:::svc
-    EDS[external-dns]:::svc
-    OTL[OTEL Collector]:::svc
-    SVC[Microservices\nIdentity · Payhub · PlayHub · Price · Watchlist · Funding · Escrow · Campaigns · Events · Admin · WebApp · Workers]:::peer
+  subgraph "Runtime & Edge"
+    K8S["Kubernetes (EKS/GKE)"]
+    NS["Namespaces"]
+    SEC["Vault/KMS"]
+    WAF["WAF/CDN"]
+    DNS["DNS (Traffic Manager)"]
+    ING["Ingress (Gateway/API GW)"]
   end
 
-  DEV --> GH
-  GH --> REG
-  GH --> CHART
-  CHART --> ARGO
-  ARGO --> K8S
-  DNS --> INGRESS
-  CDN --> INGRESS
-  INGRESS --> SVC
-  K8S --> OBS
-  SVC --> MONGO
-  SVC --> REDIS
-  SVC --> OBJ
-  ARGO --> SEC
-  SVC --> SEC
+  subgraph "Observability Stack"
+    PROM["Prometheus"]
+    LOKI["Loki"]
+    TEMPO["Tempo"]
+    GRAF["Grafana"]
+  end
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef edge fill:#FFFDE7,stroke:#FBC02D;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
+  ADM -->|"register service, deploy, policies, quotas"| API
+
+  API -->|"authZ, S2S tokens"| IDN
+  API -->|"meter infra ops, overage in FZ/PT"| PAY
+  API -->|"consume limits, freeze windows"| CFG
+  API -->|"schedule dr/backups"| WRK
+  API -->|"audit events"| ADMAPI
+  API --> EVT
+
+  API --> GIT
+  CI --> REG
+  API --> CI
+  API --> OPA
+  API --> SIG
+  API --> HELM
+  CD --> K8S
+  API --> CD
+  TF --> K8S
+  API --> TF
+  API --> SEC
+  API --> WAF
+  API --> DNS
+  API --> ING
+
+  API --> OBS
+  OBS --> PROM
+  OBS --> LOKI
+  OBS --> TEMPO
+  OBS --> GRAF
+
+  API -->|"persist"| DB
+  API --> OUT
+  OUT --> Q
+  API -->|"caches, rate limits"| CACH
+```
 ```
 *Notes:* Cloud provider can be **GCP** or **AWS**; modules are cloud‑agnostic where possible. Managed MongoDB and Redis are recommended (Atlas/MemoryDB/Elasticache/Cloud Memorystore).
 

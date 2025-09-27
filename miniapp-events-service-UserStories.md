@@ -1,9 +1,4 @@
-Repo: tg-miniapp-events-service
-File: UserStories.md
-SHA-256: 0aa351ddc2b72134c5a8419929dd7648161633332268ad2aa2e1f9a5abfedd9b
-Bytes: 19551
-Generated: 2025-09-27 01:47 GMT+7
-Sources: SystemDesign.md (authoritative), old UserStories.md (baseline), Guide
+# Miniapp Events Service's User Stories
 
 ---
 
@@ -313,22 +308,3 @@ Resources: `EVENT, EVENT_SCHEDULE, VENUE, MEDIA_ASSET, CATEGORY, CATEGORY_LINK, 
 
 ---
 
-# Self‑Check — Stakeholder Coverage Report
-
-**Counts**  
-- Personas: 11  
-- Features: 20  
-- Stories: 22  
-- Stories with non‑happy paths: 17/22  
-- Entities covered in CRUD matrix: 19/19
-
-**Checklist**  
-- ✅ All personas appear in at least one story.  
-- ✅ Each entity has at least one **C**, **R**, **U**, and **D** (or reasoned N/A).  
-- ✅ Every action mapped to roles/badges/KYC where applicable.  
-- ✅ Quotas & billing addressed for every chargeable action.  
-- ✅ Each story references APIs/entities/events.  
-- ✅ At least one end‑to‑end scenario per persona.  
-- ✅ Abuse/misuse cases enumerated with mitigations.  
-- ✅ Observability signals tied to AC.  
-- ✅ Localization/timezone handling present where user-visible.

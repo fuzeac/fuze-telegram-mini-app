@@ -1,10 +1,4 @@
-Repo: tg-miniapp-identity-service
-File: UserStories.md
-SHA-256: 97e1d952b8556ea47027ab15e5bcc2b019ab2af1051d28d50a39a6faf3d879ca
-Bytes: 21232
-Generated: 2025-09-27 01:58 GMT+7
-Sources: SystemDesign.md (authoritative), old UserStories.md (baseline), Guide
-
+# Miniapp Identity Service User Stories
 ---
 
 # Section A — Personas & Stakeholders
@@ -328,22 +322,3 @@ Resources: `USER, SESSION, DEVICE, WALLET, ALLOWLIST, BADGE_GRANT, BADGE_REVOKE,
 
 ---
 
-# Self‑Check — Stakeholder Coverage Report
-
-**Counts**  
-- Personas: 11  
-- Features: 19  
-- Stories: 21  
-- Stories with non‑happy paths: 17/21  
-- Entities covered in CRUD matrix: 20/20
-
-**Checklist**  
-- ✅ All personas appear in at least one story.  
-- ✅ Each entity has at least one **C**, **R**, **U**, and **D** exposure (or reasoned N/A).  
-- ✅ Every action mapped to roles/badges/KYC where applicable.  
-- ✅ Quotas addressed for auth, wallets, KYC, introspection.  
-- ✅ Each story references APIs/entities/events.  
-- ✅ At least one end‑to‑end scenario per key persona.  
-- ✅ Abuse/misuse cases enumerated with mitigations.  
-- ✅ Observability signals tied to AC.  
-- ✅ Localization/timezone handling present where user-visible.

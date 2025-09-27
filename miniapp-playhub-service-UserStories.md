@@ -263,7 +263,7 @@
 ## A2. RACI Matrix (capabilities)
 
 | Capability | Player | Investor | Partner | Admin | Risk | Support | Payhub | Identity | Config | SRE |
-|---|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|---|---|
 | Matchmaking | R | R | C | I | I | I | I | I | I | C |
 | Room lifecycle | R | R | C | I | I | I | I | I | I | C |
 | CFB result | R | R | C | I | I | I | I | I | I | I |

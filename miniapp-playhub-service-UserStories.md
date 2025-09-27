@@ -1,9 +1,5 @@
-Repo: tg-miniapp-playhub-service
-File: UserStories.md
-SHA-256: d12abb433a683a5a1637e92e47d48b294f8cb832fe857fc14b73dd21f73990c5
-Bytes: 22205
-Generated: 2025-09-27 01:14 GMT+7
-Sources: SystemDesign.md (authoritative), old UserStories.md (baseline), Guide
+# Miniapp Playhub Service User Stories
+
 
 ---
 
@@ -362,22 +358,3 @@ Resources: `QUEUE_TICKET, ROOM, ROOM_PLAYER, ROOM_RESULT, HOLD, TRANSFER, DISPUT
 
 ---
 
-# Self‑Check — Stakeholder Coverage Report
-
-**Counts**  
-- Personas: 13  
-- Features: 17  
-- Stories: 20  
-- Stories with non‑happy paths: 18/20  
-- Entities covered in CRUD matrix: 16/16
-
-**Checklist**  
-- ✅ All personas appear in at least one story.  
-- ✅ Each entity has at least one **C**, **R**, **U**, and **D** or reasoned N/A.  
-- ✅ Every action mapped to roles/badges/KYC where applicable.  
-- ✅ Quotas & billing addressed for every chargeable action.  
-- ✅ Each story references APIs/entities/events.  
-- ✅ At least one end‑to‑end scenario per persona.  
-- ✅ Abuse/misuse cases enumerated with mitigations.  
-- ✅ Observability signals tied to AC.  
-- ✅ Localization/timezone handling present where user-visible.

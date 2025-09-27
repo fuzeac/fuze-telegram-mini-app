@@ -10,47 +10,74 @@
 ## 1) Architecture Diagram
 ```mermaid
 flowchart LR
-  subgraph Workers
-    EXEC[Workers Executors - Node TS]:::svc
-    QUEUE[(Redis - BullMQ queues delays DLQ)]:::cache
-    REG[(MongoDB - Job audit optional)]:::db
+  subgraph "Clients"
+    ADM["Admin Console"]
   end
 
-  subgraph Core Services
-    PRICE[Price Service - internal API]:::peer
-    PLAY[PlayHub - internal API]:::peer
-    FUND[Funding - internal API]:::peer
-    ESC[Escrow - internal API]:::peer
-    CAMP[Campaigns - internal API]:::peer
-    WATCH[Watchlist - internal API]:::peer
-    EVTS[Events - internal API]:::peer
-    IDP[Identity - service tokens]:::peer
+  subgraph "Workers Service (this repo)"
+    API["REST API"]
+    SCH["Scheduler (cron)"]
+    DSP["Dispatcher"]
+    EXE["Executors"]
+    RL["Rate Limiter"]
+    QT["Quota Meter (FZ/PT)"]
+    RET["Retry Manager"]
+    DLQ["DLQ"]
+    OUT["Outbox"]
+    Q["Jobs Queue"]
+    CACH["Redis Cache"]
+    DB["Postgres"]
   end
 
-  subgraph ExternalProviders
-    P1[Provider A - HTTP]:::ext
-    P2[Provider B - HTTP]:::ext
+  subgraph "Platform Services"
+    IDN["Identity API"]
+    PAY["Payhub API"]
+    PRC["Price API"]
+    CMP["Campaigns API"]
+    EVT["Events API"]
+    WCH["Watchlist API"]
+    FND["Funding API"]
+    ESC["Escrow API"]
+    CFH["Config API"]
+    ADMAPI["Admin API"]
   end
 
-  EXEC --> QUEUE
-  EXEC --> REG
-  EXEC --> PRICE
-  EXEC --> PLAY
-  EXEC --> FUND
-  EXEC --> ESC
-  EXEC --> CAMP
-  EXEC --> WATCH
-  EXEC --> EVTS
-  EXEC --> IDP
+  subgraph "External Providers"
+    TGBOT["Telegram Bot API"]
+    CHN["Blockchain RPC"]
+    WEB["3rd‑party Webhooks"]
+    MAIL["Email/SMS provider"]
+  end
 
-  EXEC --> P1
-  EXEC --> P2
+  ADM -->|"trigger jobs, replay DLQ, inspect"| API
 
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
-  classDef ext fill:#FFFDE7,stroke:#FBC02D;
+  API -->|"authZ, S2S tokens"| IDN
+  API -->|"meter usage, invoices"| PAY
+  API -->|"read TWAP/price for jobs"| PRC
+  API -->|"campaign proofs, quest jobs"| CMP
+  API -->|"events fanout"| EVT
+  API -->|"watchlist alerts job"| WCH
+  API -->|"funding allocations job"| FND
+  API -->|"escrow expiries job"| ESC
+  API -->|"signed limits, feature flags"| CFH
+  API -->|"emit admin audits"| ADMAPI
+
+  API -->|"persist"| DB
+  API -->|"enqueue, retries"| Q
+  API -->|"idempotency, buckets"| CACH
+  API --> OUT
+  API --> DLQ
+
+  EXE --> TGBOT
+  EXE --> CHN
+  EXE --> WEB
+  EXE --> MAIL
+
+  SCH --> DSP
+  DSP --> EXE
+  RL --> DSP
+  QT --> DSP
+  RET --> DSP
 ```
 *Notes:* Workers do **not** mutate ledgers directly and never call Payhub. They invoke domain services which in turn call Payhub. All tasks are **idempotent**, retried with exponential backoff, and recorded for audit when enabled.
 

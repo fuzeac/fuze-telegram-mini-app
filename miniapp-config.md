@@ -10,62 +10,57 @@
 ## 1) Architecture Diagram (HLD)
 ```mermaid
 flowchart LR
-  subgraph Authors
-    OPS[Ops and Engineers]:::client
+  subgraph "Clients"
+    TG["Telegram WebApp"]
+    W3["Web3 Portal"]
+    ADM["Admin Console"]
   end
 
-  subgraph ConfigRepo
-    SPEC[JSON Schemas]:::doc
-    MAN[Config Manifests YAML or JSON]:::doc
-    PUB[Publisher CLI and CI]:::svc
+  subgraph "Config Service (this repo)"
+    API["REST API"]
+    PUB["Publisher"]
+    SIGN["Signer"]
+    SR["Schema Registry"]
+    VAL["Validator"]
+    TRG["Targeting Engine"]
+    OUT["Outbox"]
+    Q["Jobs Queue"]
+    CACH["Redis Cache"]
+    DB["Postgres"]
   end
 
-  subgraph Delivery
-    STORE[(Object Storage for signed JSON)]:::db
-    CDN[CDN Static Edge]:::edge
-    API[Config Service Read Only]:::svc
-    JWKS[Config Signer Public Keys]:::edge
+  subgraph "Platform Services"
+    IDN["Identity API"]
+    PAY["Payhub API"]
+    WRK["Workers"]
+    BUS["Events Bus"]
   end
 
-  subgraph Consumers
-    WEB[WebApp]:::peer
-    ADM[Admin]:::peer
-    IDP[Identity]:::peer
-    PAY[Payhub]:::peer
-    PH[PlayHub]:::peer
-    FUND[Funding]:::peer
-    ESC[Escrow]:::peer
-    WATCH[Watchlist]:::peer
-    CAMP[Campaigns]:::peer
-    PRICE[Price Service]:::peer
-    WORK[Workers]:::peer
+  subgraph "External Providers"
+    KMS["KMS (signing keys)"]
+    CDN["CDN/Static Storage"]
+    WH["Consumer Webhooks"]
   end
 
-  OPS -->|edit and review| MAN
-  MAN --> PUB
-  SPEC --> PUB
-  PUB --> STORE
-  STORE --> CDN
-  CDN --> API
-  API --> JWKS
-  API --> WEB
-  API --> ADM
-  API --> IDP
-  API --> PAY
-  API --> PH
-  API --> FUND
-  API --> ESC
-  API --> WATCH
-  API --> CAMP
-  API --> PRICE
-  API --> WORK
+  TG -->|"fetch active config"| API
+  W3 -->|"fetch active config"| API
+  ADM -->|"create, validate, schedule, rollback"| API
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef edge fill:#FFFDE7,stroke:#FBC02D;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
-  classDef doc fill:#E0F7FA,stroke:#00838F;
+  API -->|"authZ, S2S tokens"| IDN
+  API -->|"meter config ops, overage in FZ/PT"| PAY
+  API -->|"schedule publish ticks"| WRK
+  API -->|"emit config events"| BUS
+
+  API --> VAL
+  VAL --> SR
+  SIGN --> KMS
+  PUB --> SIGN
+  PUB --> CDN
+  API --> OUT
+  OUT --> Q
+  API -->|"persist"| DB
+  API -->|"cache bundles, flags"| CACH
+  OUT --> WH
 ```
 *Notes:* **Config Service** is optional when CDN is available; services can fetch JSON from the CDN directly. The service mainly exposes an index, health, and the **signer JWKS** location. All files are **signed** so consumers verify authenticity before applying. No runtime mutations.
 

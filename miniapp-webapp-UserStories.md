@@ -269,7 +269,7 @@
 ## A2. RACI Matrix
 
 | Capability | End User | Client | Support | Operator | Compliance | Finance | Campaign | Game | SRE |
-|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|---|
 | Login & session | R | A | I | I | I | I | I | I | C |
 | Balances & payments | R | A | C | I | I | A | I | I | I |
 | Watchlist & alerts | R | A | C | I | I | I | I | I | I |

@@ -237,7 +237,7 @@
 ## A2. RACI Matrix
 
 | Capability | Web3 User | Portal Client | Project Owner | Counterparty | Operator | Compliance | Finance | Custody | SRE |
-|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|---|
 | Login (PKCE) | R | A | I | I | I | I | I | I | C |
 | Wallet link | R | A | I | I | I | I | I | I | I |
 | Portfolio & balances | R | A | I | I | I | I | C | C | I |

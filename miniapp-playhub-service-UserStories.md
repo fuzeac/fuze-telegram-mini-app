@@ -281,7 +281,7 @@ Legend: R=Responsible, A=Accountable, C=Consulted, I=Informed.
 Resources: `QUEUE_TICKET, ROOM, ROOM_PLAYER, ROOM_RESULT, HOLD, TRANSFER, DISPUTE, ADJUSTMENT, RISK_FLAG, BAN, JOB, DLQ, CONFIG_VERSION, CONFIG, WEBHOOK_DELIVERY, PARTNER_ENDPOINT`
 
 | Resource \ Persona | Player | Investor | Partner | Admin | Risk | Workers | SRE |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|
 | QUEUE_TICKET | C/R/U/D | C/R/U/D | R (read own) | R (view) | R (view) | C/R/U/D | R (view) |
 | ROOM | R (read) | R (read) | R (read/write hooks) | C/R/U/D | R (read) | C/R/U/D | R (read) |
 | ROOM_PLAYER | R (read) | R (read) | R (read) | C/R/U/D | R (read) | C/R/U/D | R (read) |

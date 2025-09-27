@@ -8,6 +8,7 @@
 ---
 
 ## 1) Architecture Diagram (HLD)
+
 ```mermaid
 flowchart LR
   subgraph "Clients"
@@ -90,7 +91,6 @@ flowchart LR
   API --> OUT
   OUT --> Q
   API -->|"caches, rate limits"| CACH
-```
 ```
 *Notes:* Cloud provider can be **GCP** or **AWS**; modules are cloud‑agnostic where possible. Managed MongoDB and Redis are recommended (Atlas/MemoryDB/Elasticache/Cloud Memorystore).
 

@@ -1,8 +1,6 @@
 # User Stories: WEB3 Portal
 
 
----
-
 # Section A — Personas & Stakeholders
 
 > Derived from SystemDesign actors, auth scopes, and data ownership. Full catalog in **Appendix A1**.

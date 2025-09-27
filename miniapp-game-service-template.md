@@ -8,42 +8,69 @@
 ---
 
 ## 1) Architecture Diagram (HLD)
+
 ```mermaid
 flowchart LR
-  subgraph Client
-    GF[Game Frontend]:::client
+  subgraph "Clients"
+    TG["Telegram WebApp"]
+    W3["Web3 Portal"]
+    ADM["Admin Console"]
   end
 
-  subgraph Game Service
-    API[/Public and Internal REST/]:::svc
-    WSGW[WebSocket Gateway]:::svc
-    ENGINE[Match and Rules Engine]:::logic
-    ROOMS[(Room Registry in Redis)]:::cache
-    DB[(MongoDB game state and audit)]:::db
-    JWKS[PlayHub JWKS Cache]:::edge
+  subgraph "Game Service (this repo)"
+    API["REST API"]
+    AUTH["Session Introspection"]
+    MM["Match Manager"]
+    RM["Room Manager"]
+    AC["Anti-Cheat Engine"]
+    REP["Replay Store"]
+    LDR["Leaderboard"]
+    OUT["Outbox"]
+    Q["Jobs Queue"]
+    CACH["Redis Cache"]
+    DB["Postgres"]
   end
 
-  subgraph Platform
-    PH[PlayHub Service]:::peer
-    IDP[Identity Service]:::peer
+  subgraph "Platform Services"
+    IDN["Identity API"]
+    PH["PlayHub API"]
+    PAY["Payhub API"]
+    CFG["Config API"]
+    EVT["Events Bus"]
+    WRK["Workers"]
   end
 
-  GF -->|connect ws with gst| WSGW
-  PH -->|create rooms| API
-  ENGINE --> ROOMS
-  API --> ENGINE
-  ENGINE --> DB
-  WSGW --> ENGINE
-  ENGINE --> PH
-  JWKS --> WSGW
+  subgraph "External Providers"
+    KMS["KMS (signing keys)"]
+    CDN["CDN/Static Storage"]
+    AC3["3rd-Party Anti-Cheat (optional)"]
+  end
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
-  classDef edge fill:#FFFDE7,stroke:#FBC02D;
+  TG -->|"create/join room, submit score, fetch leaderboard"| API
+  W3 -->|"spectate, admin tools"| API
+  ADM -->|"moderate, disputes, webhooks settings"| API
+
+  API -->|"introspect tokens, TG linkage"| IDN
+  API -->|"report results, fetch player MMR, matchmaking hints"| PH
+  API -->|"meter joins, creates, submissions"| PAY
+  API -->|"read limits, flags (highStakeThreshold)"| CFG
+  API --> EVT
+  API --> WRK
+
+  API --> RM
+  API --> MM
+  API --> AC
+  API --> LDR
+  AC --> AC3
+  REP --> CDN
+  API --> AUTH
+  API --> OUT
+  OUT --> Q
+
+  API -->|"persist"| DB
+  API -->|"sessions, buckets, rate limits"| CACH
+
+  API --> KMS
 ```
 *Notes:* Game Service trusts **PlayHub** to mint **GST** tokens. The game verifies GST using PlayHub **JWKS** and never touches balances or Payhub. All financial settlement is done by PlayHub after receiving the result from the game server.
 

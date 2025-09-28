@@ -10,80 +10,60 @@
 ## 1) Architecture Diagram (HLD)
 ```mermaid
 flowchart LR
-  subgraph "Operators"
-    OP["Admins & Reviewers"]
+  subgraph "Clients"
+    ADM["Admin Console"]
   end
 
-  subgraph "Admin Console"
-    UI["Admin SPA 'React/Next.js'"]
-    BFF["Admin API (BFF)"]
-    AUTH["SSO + MFA"]
+  subgraph "Admin Service (this repo)"
+    API["REST API (BFF)"]
+    RBAC["RBAC Engine"]
+    REV["Review Workflows"]
+    CFGP["Config Publisher Orchestrator"]
+    TRSY["Treasury Approvals"]
+    BILL["Billing Ops"]
+    OUT["Outbox"]
+    Q["Jobs Queue"]
+    CACH["Redis Cache"]
+    DB["Postgres"]
   end
 
-  subgraph "Core Services"
-    ID["Identity"]
-    PAY["Payhub"]
-    PH["PlayHub"]
-    FUN["Funding"]
-    WATCH["Watchlist"]
-    CAMP["Campaigns"]
-    EV["Events"]
-    PRICE["Price Service"]
-    CFG["Config Service"]
+  subgraph "Platform Services"
+    IDN["Identity API"]
+    PAY["Payhub API"]
+    PRC["Price API"]
+    CFG["Config API"]
+    CAM["Campaigns API"]
+    FND["Funding API"]
+    EVT["Events API"]
+    WCH["Watchlist API"]
+    WRK["Workers"]
+    BUS["Events Bus"]
   end
 
-  subgraph "Admin Internals"
-    POL["Policy Manager"]
-    RBAC["RBAC & Org Admin"]
-    KYCQ["KYC/Badge Review Queue"]
-    TRES["Treasury Ops Orchestrator"]
-    METER["Meters & Pricing Plans"]
-    WH["Webhooks Registry"]
-    FF["Feature Flags & Banners"]
-    AUD["Audit Log"]
-    DB["MongoDB"]
-    RDS["Redis (rate limit, cache, jobs)"]
-    EVT["Event Bus / Dispatcher"]
-    WRK["Workers & Schedulers"]
-    SIG["Signing (HMAC/Ed25519)"]
+  subgraph "External Providers"
+    KYC["KYC Provider (webhooks)"]
+    INVC["Invoice Delivery (email/pdf)"]
   end
 
-  OP -->|browser| UI
-  UI --> BFF
-  UI --> AUTH
+  ADM -->|"login, manage, approve, publish"| API
 
-  BFF --> POL
-  BFF --> RBAC
-  BFF --> KYCQ
-  BFF --> TRES
-  BFF --> METER
-  BFF --> WH
-  BFF --> FF
-  BFF --> AUD
-  BFF --> DB
-  BFF --> RDS
-  WRK --> DB
-  WRK --> EVT
+  API -->|"authZ, badges, MFA"| IDN
+  API -->|"quotas, invoices, dunning, withdrawals"| PAY
+  API -->|"spot, TWAP, fees"| PRC
+  API -->|"signed configs, feature flags, rollout"| CFG
+  API -->|"program reviews"| FND
+  API -->|"campaign moderation"| CAM
+  API -->|"event moderation"| EVT
+  API -->|"announcements feed"| WCH
+  API -->|"emit domain events"| BUS
 
-  %% Cross-service calls (signed S2S)
-  POL --> CFG
-  METER --> CFG
-  FF --> CFG
+  API -->|"persist"| DB
+  API -->|"cache, rate, idem"| CACH
+  API -->|"enqueue, retries"| Q
+  API --> OUT
 
-  KYCQ --> ID
-  TRES --> PAY
-  TRES --> PH
-  TRES --> FUN
-  WH --> ID
-  WH --> PAY
-  WH --> PH
-  WH --> FUN
-  WH --> WATCH
-  WH --> CAMP
-  WH --> EV
-
-  SIG --> ID
-  SIG --> PAY
+  KYC -->|"Webhook callback"| API
+  API -->|"Request Delivery"| INVC
 ```
 *Notes:* The BFF signs **service‑to‑service** requests with a service JWT. All privileged mutations require **capability checks** on the staff role and may require **two approvals** before execution (e.g., withdrawals, manual credits, forced settles).
 

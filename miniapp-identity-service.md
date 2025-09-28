@@ -15,60 +15,64 @@ flowchart LR
     TG["Telegram WebApp"]
     W3["Web3 Portal"]
     ADM["Admin Console"]
-    SRV["Internal Services"]
   end
 
-  subgraph "Identity Service"
-    API["REST API v1"]
-    AUTH["Auth Core"]
-    SIWE["SIWE Verifier"]
-    TGX["Telegram Linker"]
-    BAD["Badges Engine"]
-    KYC["KYC Orchestrator"]
-    TOK["Service Tokens"]
-    OIDC["OIDC Provider"]
-    EVT["Event Dispatcher"]
-    DB["Postgres 'users, sessions, badges, kyc'"]
-    RDS["Redis 'nonce, rate, idempotency'"]
-    WRK["Workers 'reviews, expiries, webhooks'"]
+  subgraph "Identity Service (this repo)"
+    API["REST API"]
+    AUTH["JWT/JWKS Engine"]
+    POL["Policy Engine"]
+    AC["Access Control (RBAC/Badges)"]
+    ER["Event Router"]
+    Q["Jobs Queue"]
+    DB["Primary DB"]
+    CACH["Cache"]
+    WH["Webhook Dispatcher"]
   end
 
-  subgraph "Platform Services"
-    CFG["Config Service"]
-    ADMAPI["Admin Service"]
-    PAY["Payhub Service"]
+  subgraph "Platform Services (consumers)"
+    PH["Playhub"]
+    PAY["Payhub"]
+    ESC["Escrow"]
+    FND["Funding"]
+    CMP["Campaigns"]
+    EVT["Events"]
+    WAT["Watchlist"]
+    PRC["Price"]
+    ADM2["Admin/BFF"]
+    WRK["Workers"]
   end
 
   subgraph "External Providers"
-    TGBOT["Telegram Bot API"]
-    KYCEXT["KYC Provider"]
-    EMAIL["Email/SMS"]
+    TGPLAT["Telegram Platform"]
+    KYC["KYC Provider"]
+    RPC["Chain RPC (wallet proofs)"]
   end
 
-  TG -->|login, link wallet, badges| API
-  W3 -->|SIWE, sessions, roles| API
-  ADM -->|review, suspend, roles| API
-  SRV -->|introspect, mint service token| API
+  TG -->|"/v1/auth/telegram/verify"| API
+  W3 -->|"SIWE/TonProof Flow"| API
+  ADM -->|"/v1/admin/*"| API
 
   API --> AUTH
-  API --> SIWE
-  API --> TGX
-  API --> BAD
-  API --> KYC
-  API --> TOK
-  API --> OIDC
-  API --> EVT
+  API --> POL
+  POL --> AC
   API --> DB
-  API --> RDS
-  WRK --> BAD
-  WRK --> KYC
-  WRK --> EVT
+  API --> CACH
+  API --> Q
+  API --> WH
 
-  API --> CFG
-  API --> ADMAPI
-  KYC --> KYCEXT
-  TGX --> TGBOT
-  EVT --> EMAIL
+  API -->|"Webhook Callbacks"| KYC
+  API -->|"Verify Signature"| RPC
+
+  PH -->|"/v1/introspect"| API
+  PAY -->|"/v1/introspect"| API
+  ESC -->|"/v1/introspect"| API
+  FND -->|"/v1/introspect"| API
+  CMP -->|"/v1/webhooks (consume)"| WH
+  EVT -->|"/v1/introspect"| API
+  WAT -->|"/v1/introspect"| API
+  PRC -->|"/v1/introspect"| API
+  ADM2 -->|"/v1/admin/*"| API
+  WRK -->|"/jobs"| Q
 ```
 
 *Notes:* Identity verifies Telegram **initData** server side, issues a session token for the WebApp, and exposes **JWKS** so other services can verify that token without calling back. Services use **service JWTs** for internal calls.

@@ -17,52 +17,48 @@ flowchart LR
     ADM["Admin Console"]
   end
 
-  subgraph "Funding Service"
-    API["REST API v1"]
-    EVAL["Evaluation Engine"]
-    VOTE["Voting Manager"]
-    SALE["Sale Manager"]
-    PUR["Purchase Engine"]
-    VEST["Vesting Manager"]
-    EVT["Event Dispatcher"]
-    DB["MongoDB"]
-    RDS["Redis cache, jobs"]
-    WRK["Workers schedulers"]
+  subgraph "Funding Service (this repo)"
+    API["REST API"]
+    EVA["Evaluation Engine"]
+    VOTE["Voting Service"]
+    ORD["Order Orchestrator"]
+    VST["Vesting Engine"]
+    OUT["Outbox"]
+    Q["Jobs Queue"]
+    CACH["Redis Cache"]
+    DB["Postgres"]
   end
 
   subgraph "Platform Services"
-    ID["Identity"]
-    PAY["Payhub"]
-    PRICE["Price Service"]
-    CFG["Config Service"]
-    ADMIN["Admin Service"]
+    IDN["Identity API"]
+    PRC["Price API"]
+    PAY["Payhub API"]
+    EVT["Events Bus"]
+    CFG["Config API"]
+    WRK["Workers"]
   end
 
-  TG -->|submit project, browse, purchase| API
-  W3 -->|browse, purchase| API
-  ADM -->|review dashboards, overrides| API
+  subgraph "External"
+    TGW["Telegram Bot Webhook"]
+  end
 
-  API --> EVAL
-  API --> VOTE
-  API --> SALE
-  API --> PUR
-  API --> VEST
-  API --> DB
-  API --> RDS
-  WRK --> EVAL
-  WRK --> VOTE
-  WRK --> SALE
-  WRK --> PUR
-  WRK --> VEST
-  WRK --> EVT
+  TG -->|"projects, votes, purchase"| API
+  W3 -->|"HTTP"| API
+  ADM -->|"config, moderation, sales"| API
 
-  API --> ID
-  PUR --> PAY
-  VEST --> PAY
-  API --> PRICE
-  API --> CFG
-  ADMIN --> API
-  EVT --> ADMIN
+  API -->|"authZ, badges/KYC"| IDN
+  API -->|"USDT equivalence, snapshots"| PRC
+  API -->|"holds, settlements"| PAY
+  API -->|"emit events"| EVT
+  API -->|"signed config"| CFG
+
+  API -->|"persist"| DB
+  API -->|"cache, rate, idem"| CACH
+  API -->|"enqueue, retries"| Q
+  API --> OUT
+
+  WRK -->|"open/close windows, score AI, settle vesting"| API
+  TGW -->|"notify results and reminders"| API
 ```
 
 *Notes:* Funding owns sale metadata and allocation math. Purchases place **holds** or perform **deposit credits** via Payhub depending on flow. Vesting creates scheduled **grants** and releases as credits over time. Identity referral codes can apply bonus allocations or whitelist priority per config.

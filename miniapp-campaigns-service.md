@@ -10,49 +10,69 @@
 ## 1) Architecture Diagram
 ```mermaid
 flowchart LR
-  subgraph Clients
-    WEB[Telegram WebApp - Nextjs]:::client
-    ADMIN[Admin Console - Staff]:::client
+  subgraph "Clients"
+    TG["Telegram WebApp"]
+    W3["Web3 Portal"]
+    ADM["Admin Console"]
   end
 
-  subgraph Campaigns
-    API[/Public REST API\nhealthz and readyz/]:::svc
-    ENGINE[Eligibility and Rules Engine]:::logic
-    CLAIMS[Claims Processor and Idempotency]:::logic
-    DB[(MongoDB - Campaign RewardPool Rule Claim Grant Audit)]:::db
-    REDIS[(Redis - idem locks rate limits)]:::cache
+  subgraph "Campaigns Service (this repo)"
+    API["REST API"]
+    QENG["Quest Engine"]
+    VAL["Validation Workers"]
+    REW["Reward Orchestrator"]
+    REF["Referral Engine"]
+    LBD["Leaderboard Engine"]
+    OUT["Outbox"]
+    Q["Jobs Queue"]
+    CACH["Redis Cache"]
+    DB["Postgres"]
   end
 
-  subgraph Core Services
-    IDP[Identity - JWKS and profiles]:::peer
-    PAY[Payhub - deposit credit and ledger]:::peer
-    PLAY[PlayHub - optional signals and CFB]:::peer
-    DISC[Discovery - watchlists signals]:::peer
-    EVTS[Events - attendance signals]:::peer
-    CFG[Config - signed config]:::peer
-    WORK[Workers - async jobs]:::peer
+  subgraph "Platform Services"
+    IDN["Identity API"]
+    PAY["Payhub API"]
+    PRC["Price API"]
+    EVT["Events Bus"]
+    CFG["Config API"]
+    WRK["Workers"]
   end
 
-  WEB -->|browse and claim| API
-  ADMIN -->|create and publish| API
-  API --> ENGINE
-  API --> CLAIMS
-  API --> DB
-  API --> REDIS
-  ENGINE --> IDP
-  ENGINE --> DISC
-  ENGINE --> EVTS
-  ENGINE --> PLAY
-  CLAIMS --> PAY
-  CFG --> Campaigns
-  WORK -->|retries and DLQ| API
+  subgraph "Internal Proof Sources"
+    WAT["Watchlist Service"]
+    PLH["Playhub Service"]
+    FND["Funding Service"]
+    EVE["Events Service"]
+  end
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
+  subgraph "External Providers"
+    SOC["Social APIs (Twitter/Telegram)"]
+    CHN["Chain Indexer (on-chain data)"]
+  end
+
+  TG -->|"browse, join, submit proofs"| API
+  W3 -->|"HTTP"| API
+  ADM -->|"authoring, budgets, fraud, clawbacks"| API
+
+  API -->|"authZ, badges/KYC"| IDN
+  API -->|"holds, settlements, overage"| PAY
+  API -->|"USDT equivalence, FX"| PRC
+  API -->|"emit events"| EVT
+  API -->|"signed config, quotas, pricing"| CFG
+
+  API -->|"persist"| DB
+  API -->|"cache, rate, idem"| CACH
+  API -->|"enqueue, retries"| Q
+  API --> OUT
+
+  VAL -->|"read tasks, validate proofs"| API
+  API -->|"in-app proof webhooks"| WAT
+  API -->|"in-app proof webhooks"| PLH
+  API -->|"in-app proof webhooks"| FND
+  API -->|"in-app proof webhooks"| EVE
+
+  SOC -->|"OAuth callbacks, webhooks"| API
+  CHN -->|"proof lookups (RPC/indexer)"| API
 ```
 *Notes:* Campaigns never mutates balances directly. It calls **Payhub** to issue credits from a **campaign treasury user** to the claimant, with strict idempotency and audit trails. All end user authentication is via **Identity** tokens.
 

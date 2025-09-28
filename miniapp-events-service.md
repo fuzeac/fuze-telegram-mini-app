@@ -10,46 +10,58 @@
 ## 1) Architecture Diagram
 ```mermaid
 flowchart LR
-  subgraph Clients
-    WEB[Telegram WebApp - Nextjs]:::client
-    ADMIN[Admin Console - Staff]:::client
-    ORG[Organizer Portal - minimal]:::client
+  subgraph "Clients"
+    TG["Telegram WebApp"]
+    W3["Web3 Portal"]
+    ADM["Admin Console"]
   end
 
-  subgraph Events
-    API[/Public REST API\nhealthz and readyz/]:::svc
-    SUBMIT[Submission and Moderation]:::logic
-    CATALOG[Event Catalog and Search]:::logic
-    DB[(MongoDB - Event Organizer Venue Tag Submission Moderation)]:::db
-    CACHE[(Redis - cache rate limits idem)]:::cache
+  subgraph "Events Service (this repo)"
+    API["REST API"]
+    SRCH["Search Indexer"]
+    RSVPENG["RSVP Engine"]
+    PROOF["Attendance Proof"]
+    FEAT["Featured Curator"]
+    ENR["Enrichment Workers"]
+    OUT["Outbox"]
+    Q["Jobs Queue"]
+    CACH["Redis Cache"]
+    DB["Postgres"]
   end
 
-  subgraph Core Services
-    IDP[Identity - JWKS and roles]:::peer
-    WL[Watchlist Service - asset tagging]:::peer
-    WORK[Workers - oembed scrape expiry sweeps]:::peer
-    CFG[Config - feature flags allow lists]:::peer
+  subgraph "Platform Services"
+    IDN["Identity API"]
+    PAY["Payhub API"]
+    PRC["Price API"]
+    CFG["Config API"]
+    EVT["Events Bus"]
+    WRK["Workers"]
   end
 
-  WEB -->|browse events detail| API
-  ORG -->|submit and edit| API
-  ADMIN -->|approve and curate| API
+  subgraph "External Providers"
+    EXTAPI["Event APIs (Eventbrite/Meetup/Eventpop)"]
+    GEO["Geo Provider (reverse geocode)"]
+    CAL["Calendar (ICS/WebCal)"]
+  end
 
-  API --> SUBMIT
-  API --> CATALOG
-  API --> DB
-  API --> CACHE
-  SUBMIT --> IDP
-  CATALOG --> WL
-  WORK -->|oembed and clean up| API
-  CFG --> Events
+  TG -->|"discover, detail, RSVP, check-in"| API
+  W3 -->|"HTTP"| API
+  ADM -->|"authoring, curation, moderation"| API
 
-  classDef client fill:#E3F2FD,stroke:#1E88E5;
-  classDef svc fill:#E8F5E9,stroke:#43A047;
-  classDef logic fill:#F1F8E9,stroke:#7CB342;
-  classDef db fill:#FFF3E0,stroke:#FB8C00;
-  classDef cache fill:#F3E5F5,stroke:#8E24AA;
-  classDef peer fill:#ECEFF1,stroke:#546E7A;
+  API -->|"authZ, badges/KYC"| IDN
+  API -->|"overage FZ/PT, invoices"| PAY
+  API -->|"USDT equivalence"| PRC
+  API -->|"signed limits, feature flags"| CFG
+  API -->|"emit domain events"| EVT
+
+  API -->|"persist"| DB
+  API -->|"cache, rate, idem"| CACH
+  API -->|"enqueue, retries"| Q
+  API --> OUT
+
+  ENR -->|"refresh details, backoff"| EXTAPI
+  PROOF -->|"geofence lookup"| GEO
+  API -->|"generate ICS"| CAL
 ```
 *Notes:* The Events service is **read‑heavy** and safe by design: no ticketing, no wallet custody. It stores links to external platforms and renders a canonical event page/card in the WebApp with a **Book on ...** button that opens the external URL.
 

@@ -1,7 +1,5 @@
 # Miniapp Webapp
-*Version:* v0.2.0  
-*Last Updated:* 2025-09-24 03:18 +07  
-*Owner:* FUZE App Engineering — WebApp (Telegram Mini App)
+*Version:* v0.2.1  
 
 > High‑level architectural blueprint for the **Telegram Mini App frontend**. This document covers UI architecture, integration contracts, client‑side state, data flows, security posture, and cross‑repo interoperability for MVP features: login, matchmaking and gameplay handoff, **CFB v1** bets, watchlists/feeds, campaigns, and events.
 
@@ -10,45 +8,55 @@
 ## 1) Architecture Diagram (HLD)
 ```mermaid
 flowchart LR
-  subgraph "Telegram Container"
-    TG["Telegram App"]
-    WUI["WebApp (Next.js)"]
+  subgraph "Clients"
+    TG["Telegram WebApp"]
   end
 
-  subgraph "Platform APIs"
-    IDN["Identity Service"]
-    PAY["Payhub Service"]
-    PH["PlayHub Service"]
-    FUN["Funding Service"]
-    WAT["Watchlist Service"]
-    PRC["Price Service"]
-    EVT["Events Service"]
-    CMP["Campaigns Service"]
-    ESC["Escrow Service"]
-    CFG["Config Service"]
+  subgraph "WebApp (this repo)"
+    UI["SPA UI (React/Vite)"]
+    BFF["BFF API (Fastify)"]
+    SESS["Session Store (Redis)"]
+    LC["Local Cache (IndexedDB)"]
+    HealthAggregator["Health Aggregator"]
   end
 
-  subgraph "Infra"
-    CDN["CDN/Edge"]
-    SSR["Next.js Runtime"]
-    ANALYTICS["Telemetry (OTEL)"]
+  subgraph "Platform Services"
+    IDN["Identity API"]
+    PAY["Payhub API (for Stars & FZ)"]
+    PRC["Price API"]
+    WAT["Watchlist API"]
+    PH["Playhub API"]
+    CMP["Campaigns API"]
+    FND["Funding API"]
+    SEX["Star Exchange API"]
+    EVT["Events API"]
+    CFG["Config API"]
   end
 
-  TG -->|launch via deep-link| WUI
-  WUI -->|initData auth| IDN
-  WUI -->|localized content| CFG
-  WUI -->|wallet, balances, invoices| PAY
-  WUI -->|matchmaking, CFB| PH
-  WUI -->|fund list, purchase| FUN
-  WUI -->|watchlist, alerts, feed| WAT
-  WUI -->|charts, snapshots| PRC
-  WUI -->|events, reminders| EVT
-  WUI -->|quests, refer, badges view| CMP
-  WUI -->|p2p deals view| ESC
+  subgraph "External"
+    TGPLAT["Telegram Platform"]
+  end
 
-  WUI --> CDN
-  WUI --> SSR
-  WUI --> ANALYTICS
+  TG -->|"initData, UI assets"| UI
+  UI -->|"REST/JSON"| BFF
+  
+  BFF -->|"verify session, badges"| IDN
+  BFF -->|"process Star/FZ payments, get balances"| PAY
+  BFF -->|"get price data"| PRC
+  BFF -->|"manage watchlists"| WAT
+  BFF -->|"join games"| PH
+  BFF -->|"submit campaign proofs"| CMP
+  BFF -->|"manage events"| EVT
+  BFF -->|"get feature flags"| CFG
+  
+  %% Updated Service Interactions
+  BFF -->|"subscribe to sales with Stars"| FND
+  BFF -->|"execute Star-to-Crypto swaps, manage P2P offers"| SEX
+
+  BFF --> SESS
+  BFF --> LC
+  BFF --> HealthAggregator
+  TGPLAT -->|"launch params"| UI
 ```
 *Notes:* WebApp calls **public endpoints** of domain services. Payhub is never called directly by the client. Any balance snapshots shown come from domain responses (e.g., game results or optional summary endpoints).
 
